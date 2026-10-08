@@ -43,7 +43,7 @@ a retry on a file you rewrite several times.
    snap > "$QA_SCRATCH/tree-before.txt"
    ```
 2. **Change `phase` with the script**, at every transition — `reviewing`, then
-   `merging`, `rendering`, `posting`; `round-return.sh` sets `done`:
+   `merging`, `rendering`, `posting`, and `done` in step 4:
    ```bash
    bash "$CLAUDE_PLUGIN_ROOT/lib/set-phase.sh" "$QA_SCRATCH" reviewing
    ```
@@ -67,10 +67,14 @@ a retry on a file you rewrite several times.
    `tree-before.txt`, the reviewer wrote to the tree: report it, name the paths, and
    do **not** auto-revert — a reviewer's leftover and the author's own uncommitted
    work are indistinguishable.
-4. **At the end of the round**, record the timing:
+4. **At the end of the round**, set `done`, then record the timing:
    ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/lib/set-phase.sh" "$QA_SCRATCH" done
    bash "${CLAUDE_PLUGIN_ROOT}/lib/record-timing.sh" "$QA_SCRATCH"
    ```
+   This path never runs `round-return.sh`, so nothing else writes `done`. Without it
+   the status line reports the finished round `⚠stalled` until it ages out. Order
+   matters: `record-timing.sh` takes the round's end from the status file's mtime.
 
 **This path does NOT attribute findings.** `lib/attribute-findings.sh` is called
 only from the manager path, so on a sequential round `qa_introduced`,

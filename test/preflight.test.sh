@@ -2595,6 +2595,15 @@ for doc in "$RUNPANEL_SRC" "$SEQ"; do
   eq "  $(basename "$doc") uses lens-landed.sh" \
      "$( [ "$(grep -c 'lens-landed\.sh' "$doc")" -ge 1 ] && echo yes || echo no )" "yes"
 done
+# The sequential path never runs round-return.sh, so it must set `done` itself, or
+# the statusline reports every finished sequential round as stalled. Before
+# record-timing.sh, which reads the round's end from the status file's mtime.
+_done=$(grep -n 'set-phase\.sh" "\$QA_SCRATCH" done' "$SEQ" | head -1 | cut -d: -f1)
+_rt=$(grep -n 'record-timing\.sh" "\$QA_SCRATCH"' "$SEQ" | head -1 | cut -d: -f1)
+eq "  sequential path sets done before record-timing" \
+   "$( [ -n "$_done" ] && [ -n "$_rt" ] && [ "$_done" -lt "$_rt" ] && echo yes || echo no )" "yes"
+eq "  sequential path does not credit round-return.sh with done" \
+   "$(grep -c 'round-return\.sh` sets `done`' "$SEQ")" "0"
 # The default path must actually REACH the driver, and must no longer describe the
 # Agent fan-out it replaced. Both halves matter: a doc that still tells the manager
 # to spawn qa-reviewer subagents gives it two contradictory ways to run the panel,
