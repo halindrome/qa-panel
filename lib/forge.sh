@@ -143,7 +143,7 @@ _forge_require_token() {
 # model that may hold an empty token while believing it has the QA one; this
 # cannot be. Idempotent: a body that already carries the banner is unchanged.
 # --------------------------------------------------------------------------
-FORGE_NO_IDENTITY_BANNER='> 🤖 **Automated QA review.** An independent QA agent ([claude-qa-manager](https://github.com/halindrome/claude-qa-manager)) wrote this, not the account it is posted from. No separate QA identity is configured, so it was posted with the credentials of the person who ran the review.'
+FORGE_NO_IDENTITY_BANNER='> 🤖 **Automated QA review.** An independent QA agent ([qa-panel](https://github.com/halindrome/qa-panel)) wrote this, not the account it is posted from. No separate QA identity is configured, so it was posted with the credentials of the person who ran the review.'
 _forge_note_body() {
   if [ -n "${2:-}" ] || grep -qF -- '**Automated QA review.**' "$1" 2>/dev/null; then
     cat "$1"; return

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# init.sh — set up a project (and this machine) to use claude-qa-manager.
+# init.sh — set up a project (and this machine) to use qa-panel.
 #
 # Subcommands:
 #   check    report what is present/missing; changes NOTHING (default when piped)
@@ -20,10 +20,10 @@
 set -uo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Deliberately NOT XDG-aware: it must agree with preflight.sh's CONFIG_USER and
-# with the $HOME-relative `qa_agent.token_file` default. Honouring
-# XDG_CONFIG_HOME here alone would store the token where preflight never looks.
-CONFIG_DIR="$HOME/.config/claude-qa-manager"
+# From lib/config-dir.sh, never spelled out here: the token must be stored exactly
+# where preflight.sh says to read it.
+. "$PLUGIN_ROOT/lib/config-dir.sh" || { echo "init: could not load lib/config-dir.sh" >&2; exit 1; }
+CONFIG_DIR="$QA_CONFIG_DIR"
 
 c_red=$'\033[31m'; c_grn=$'\033[32m'; c_yel=$'\033[33m'; c_dim=$'\033[2m'; c_rst=$'\033[0m'
 ok()   { printf '  %s✔%s %s\n' "$c_grn" "$c_rst" "$1"; }
@@ -51,7 +51,7 @@ detect_forge() {
 }
 
 cmd_check() {
-  echo "claude-qa-manager — environment check"
+  echo "qa-panel — environment check"
   echo
   info "repo root: $REPO_ROOT"
 
@@ -107,6 +107,10 @@ cmd_check() {
 
   if [ -f "$CONFIG_DIR/config.json" ]; then ok "user config: $CONFIG_DIR/config.json"
   else info "no user config (optional; holds credentials + policy)"; fi
+  if [ "$QA_CONFIG_DIR_LEGACY" = true ]; then
+    warn "using the old config dir $CONFIG_DIR (it still works)"
+    info "to move it: mv '$CONFIG_DIR' '$QA_CONFIG_DIR_NEW' — and update qa_agent.token_file if you set it"
+  fi
 
   check_verify
 

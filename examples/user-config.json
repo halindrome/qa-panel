@@ -1,5 +1,5 @@
 {
-  "_comment": "User-level config: copy to ~/.config/claude-qa-manager/config.json. It applies to every repository you review; a project's .claude/skills/qa-cycle/config.json overrides it key by key. Every block is optional -- delete what you do not need.",
+  "_comment": "User-level config: copy to ~/.config/qa-panel/config.json. It applies to every repository you review; a project's .claude/skills/qa-cycle/config.json overrides it key by key. Every block is optional -- delete what you do not need.",
 
   "qa_agent": {
     "_comment": "The separate QA account that posts round notes and approves. Store its token with /qa-init; never put the token here.",

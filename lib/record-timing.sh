@@ -60,7 +60,8 @@ lens_phase=$(( ${end:-$prev} - FANOUT ))
 
 # One history file per project, outside the repo so it is never committed and
 # never shows up in `git status` on someone's feature branch.
-HIST_DIR="$HOME/.config/claude-qa-manager/timings"
+. "$(dirname "${BASH_SOURCE[0]}")/config-dir.sh" 2>/dev/null || exit 0
+HIST_DIR="$QA_CONFIG_DIR/timings"
 mkdir -p "$HIST_DIR" 2>/dev/null || exit 0
 key=$(printf '%s' "${TARGET_ABS:-unknown}" | { shasum -a 256 2>/dev/null || sha256sum; } | awk '{print $1}' | cut -c1-16)
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

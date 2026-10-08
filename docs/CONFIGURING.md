@@ -20,7 +20,7 @@ without restating its block.
 | Layer | Path | Holds |
 |---|---|---|
 | shipped | `config/defaults.json` | policy defaults |
-| user | `~/.config/claude-qa-manager/config.json` | credentials, approval policy |
+| user | `~/.config/qa-panel/config.json` | credentials, approval policy |
 | project | `<repo>/.claude/skills/qa-cycle/config.json` | targets, schema paths |
 
 The split is deliberate: a project should never restate credentials, and a user config
@@ -135,7 +135,7 @@ developer's own credentials.
 
 ```json
 { "qa_agent": { "token_env": "QA_AGENT_TOKEN",
-                "token_file": "~/.config/claude-qa-manager/qa-agent-token",
+                "token_file": "~/.config/qa-panel/qa-agent-token",
                 "expected_username": "qa-bot" } }
 ```
 
@@ -310,7 +310,7 @@ them to yours. Two rules govern what gets measured:
 - **Only runs that terminated are recorded.** Recording a timeout would ratchet the bound
   upward using the number that means "this did not finish".
 
-Durations live outside the repo, in `~/.config/claude-qa-manager/verify-timings/`: they are
+Durations live outside the repo, in `~/.config/qa-panel/verify-timings/`: they are
 observed local data, not configuration, and one machine's timings are wrong for another's
 hardware. Delete a file there to reset that target's baseline.
 

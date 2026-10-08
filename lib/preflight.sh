@@ -101,12 +101,11 @@ REPO_ROOT="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)
 # The merged result is written to one temp file and every downstream jq call
 # reads it, which keeps the (many) existing `.targets[$t]…` queries unchanged.
 CONFIG_DEFAULTS="$PLUGIN_ROOT/config/defaults.json"
-# Deliberately NOT XDG-aware. `qa_agent.token_file` defaults to the literal
-# `~/.config/claude-qa-manager/qa-agent-token`, expanded against $HOME below; if
-# this line honoured XDG_CONFIG_HOME the two would diverge and `init.sh token`
-# would store a token where preflight never looks. Claude Code itself uses
-# CLAUDE_CONFIG_DIR, not XDG (see the tool-mandate probe further down).
-CONFIG_USER="$HOME/.config/claude-qa-manager/config.json"
+# The user config dir, the token's default home and the timing histories all come
+# from lib/config-dir.sh, so init.sh stores the token exactly where this script
+# says to read it. Never spell the directory out here.
+. "$PLUGIN_ROOT/lib/config-dir.sh" || die_internal "could not load lib/config-dir.sh"
+CONFIG_USER="$QA_CONFIG_DIR/config.json"
 CONFIG_PROJECT="$REPO_ROOT/.claude/skills/qa-cycle/config.json"
 
 [ -f "$CONFIG_DEFAULTS" ] || die_usage "shipped defaults missing at $CONFIG_DEFAULTS (broken install)"
@@ -279,7 +278,7 @@ fi
 
 EXPECTED_QA_USER=$(jq -r '.qa_agent.expected_username // ""' "$BB")
 QA_TOKEN_ENV=$(jq -r     '.qa_agent.token_env // "QA_AGENT_TOKEN"'    "$BB")
-QA_TOKEN_FILE=$(jq -r    '.qa_agent.token_file // "~/.config/claude-qa-manager/qa-agent-token"' "$BB")
+QA_TOKEN_FILE=$(jq -r --arg d "$QA_CONFIG_DIR/qa-agent-token" '.qa_agent.token_file // $d' "$BB")
 TINY_MAX=$(jq -r '.qa_agent.approval.tiny_mr_max_lines_changed // 50' "$BB")
 # NEVER read a boolean knob with jq's `//`. It is the ALTERNATIVE operator, not a
 # null-coalesce: it fires on `false` as well as `null`, so `.x // true` can never
@@ -392,7 +391,7 @@ esac
 # The target directory is also the more honest key: two checkouts of the same
 # repo on different disks genuinely have different suite timings.
 VERIFY_TIMINGS_KEY=$(printf '%s' "$TARGET_ABS" | sed 's|^/||; s|/|-|g')
-VERIFY_TIMINGS="${XDG_CONFIG_HOME:-$HOME/.config}/claude-qa-manager/verify-timings/${VERIFY_TIMINGS_KEY}"
+VERIFY_TIMINGS="$QA_CONFIG_DIR/verify-timings/${VERIFY_TIMINGS_KEY}"
 
 # Baseline policy, resolved the same way as every other verify key: per-target
 # beats project-wide beats the shipped default. Emitted as one object so the

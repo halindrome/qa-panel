@@ -1,5 +1,5 @@
 {
-  "_comment": "Shipped defaults. Resolution order, later wins, merged recursively (a later layer overrides single keys inside an object, not the whole object): (1) this file, (2) ~/.config/claude-qa-manager/config.json (user-level: credentials, policy), (3) <repo>/.claude/skills/qa-cycle/config.json (project-level: targets, schema files). A project should never need to restate credentials, and a user config should never need to know a repo's layout.",
+  "_comment": "Shipped defaults. Resolution order, later wins, merged recursively (a later layer overrides single keys inside an object, not the whole object): (1) this file, (2) ~/.config/qa-panel/config.json (user-level: credentials, policy), (3) <repo>/.claude/skills/qa-cycle/config.json (project-level: targets, schema files). A project should never need to restate credentials, and a user config should never need to know a repo's layout.",
 
   "protected_branches": ["main", "master"],
 
@@ -41,9 +41,8 @@
   },
 
   "qa_agent": {
-    "_comment": "Optional separate identity for QA-attributed actions (round notes, approvals). Fix commits and pushes always use the developer's own credentials. When unresolvable, the plugin degrades gracefully: notes post under the dev identity and approval is skipped entirely.",
+    "_comment": "Optional separate identity for QA-attributed actions (round notes, approvals). Fix commits and pushes always use the developer's own credentials. When unresolvable, the plugin degrades gracefully: notes post under the dev identity and approval is skipped entirely. token_file is deliberately absent here: its default is qa-agent-token in the user config dir that lib/config-dir.sh resolves, and a literal path here would override that.",
     "token_env": "QA_AGENT_TOKEN",
-    "token_file": "~/.config/claude-qa-manager/qa-agent-token",
     "expected_username": "",
     "approval": {
       "min_clean_round": 2,
@@ -66,7 +65,7 @@
     "expect": "",
     "_comment_timeout": "Seconds the fix step may let the verify command run before it is killed (TERM, then KILL, on the whole process group). Detection proves a test entry point EXISTS; it never proves the command TERMINATES, and nothing between detection and execution establishes that it is autonomous -- a `scripts.test` that resolves to a watcher, or any suite that reads stdin, blocks the round with nothing to kill it. A killed run reports state 'timeout', which is NOT a pass: like 'none-found' it means the round has no execution evidence. Per-target form `targets.<name>.verify.timeout_seconds` wins over this one. Raise it for a legitimately slow suite; do not raise it to accommodate a watcher -- name the project's non-watch entry point in `verify.command` instead.",
     "timeout_seconds": 900,
-    "_comment_baseline": "The flat ceiling above is safe but blunt: a 20-second suite that wedges still burns the whole allowance before anyone looks. So the bound is also LEARNED from how long this target's own verify command has actually taken. Only the declared `verify.command` is measured -- a round runs other things through the same helper (a red-first check on one test file is seconds where the suite is minutes) and pooling them would let the narrow run set the bound for the suite. Only runs that TERMINATED are recorded; recording a timeout would ratchet the bound upward using the number that means 'this did not finish'. Durations live OUTSIDE the repo, under ~/.config/claude-qa-manager/verify-timings/, because they are observed local data, not configuration -- one machine's timings are wrong for everyone else's hardware. Every value here is policy, not a law: they were first chosen against one project's suite, and a generic driver must not carry one project's calibration. `min_samples: 0` disables the learned bound and leaves the flat ceiling. Per-target form `targets.<name>.verify.baseline` wins over this one.",
+    "_comment_baseline": "The flat ceiling above is safe but blunt: a 20-second suite that wedges still burns the whole allowance before anyone looks. So the bound is also LEARNED from how long this target's own verify command has actually taken. Only the declared `verify.command` is measured -- a round runs other things through the same helper (a red-first check on one test file is seconds where the suite is minutes) and pooling them would let the narrow run set the bound for the suite. Only runs that TERMINATED are recorded; recording a timeout would ratchet the bound upward using the number that means 'this did not finish'. Durations live OUTSIDE the repo, under ~/.config/qa-panel/verify-timings/, because they are observed local data, not configuration -- one machine's timings are wrong for everyone else's hardware. Every value here is policy, not a law: they were first chosen against one project's suite, and a generic driver must not carry one project's calibration. `min_samples: 0` disables the learned bound and leaves the flat ceiling. Per-target form `targets.<name>.verify.baseline` wins over this one.",
     "baseline": {
       "min_samples": 3,
       "window": 10,

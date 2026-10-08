@@ -104,7 +104,7 @@ SH
 }
 
 d=$(mkrepo "https://gitlab.com/o/r.git"); bin="$d/bin"; mkstub "$bin"
-cfgdir="$d/home/.config/claude-qa-manager"
+cfgdir="$d/home/.config/qa-panel"
 ( cd "$d" && HOME="$d/home" PATH="$bin:$PATH" QA_AGENT_TOKEN="good-token" \
     bash "$INIT" token </dev/null >/dev/null 2>&1 )
 eq "valid token stored"        "$( [ -s "$cfgdir/qa-agent-token" ] && echo yes || echo no )" "yes"
@@ -123,7 +123,7 @@ rm -rf "$d"
 # token is worse than none: the plugin looks configured and silently posts under
 # the developer's identity instead.
 d=$(mkrepo "https://gitlab.com/o/r.git"); bin="$d/bin"; mkstub "$bin"
-cfgdir="$d/home/.config/claude-qa-manager"
+cfgdir="$d/home/.config/qa-panel"
 ( cd "$d" && HOME="$d/home" PATH="$bin:$PATH" QA_AGENT_TOKEN="bad-token" \
     bash "$INIT" token </dev/null >/dev/null 2>&1 )
 rc=$?
@@ -131,19 +131,50 @@ eq "unverifiable token -> non-zero exit" "$( [ "$rc" -ne 0 ] && echo yes || echo
 eq "  and is NOT stored"                 "$( [ -e "$cfgdir/qa-agent-token" ] && echo stored || echo absent )" "absent"
 rm -rf "$d"
 
-# The user config layer is $HOME-relative and deliberately NOT XDG-aware, because
-# `qa_agent.token_file` is a $HOME-relative literal that preflight expands. If
-# init.sh alone honoured XDG_CONFIG_HOME the two would diverge: the token would be
-# stored where preflight never looks, and preflight would report "no token" on a
-# repo that was correctly initialised. Point XDG at a decoy and assert it is
-# ignored, so re-introducing XDG-awareness here fails loudly rather than silently.
+# The user config dir is $HOME-relative and deliberately NOT XDG-aware: init.sh
+# stores the token there and preflight publishes the same path, both via
+# lib/config-dir.sh. If one honoured XDG_CONFIG_HOME the two would diverge: the
+# token would be stored where preflight never looks, and preflight would report
+# "no token" on a repo that was correctly initialised. Point XDG at a decoy and
+# assert it is ignored, so re-introducing XDG-awareness fails loudly.
 d=$(mkrepo "https://gitlab.com/o/r.git"); bin="$d/bin"; mkstub "$bin"
-cfgdir="$d/home/.config/claude-qa-manager"
+cfgdir="$d/home/.config/qa-panel"
 ( cd "$d" && HOME="$d/home" XDG_CONFIG_HOME="$d/decoy" PATH="$bin:$PATH" \
     QA_AGENT_TOKEN="good-token" bash "$INIT" token </dev/null >/dev/null 2>&1 )
 eq "XDG_CONFIG_HOME ignored: token under \$HOME" "$( [ -s "$cfgdir/qa-agent-token" ] && echo yes || echo no )" "yes"
 eq "  and nothing written to the XDG decoy"      "$( [ -e "$d/decoy" ] && echo written || echo absent )" "absent"
 rm -rf "$d"
+
+# A machine set up under the plugin's former name keeps its config dir: the token,
+# user config and timings are used where they are, and a second, empty dir must
+# not appear beside them (a token stored in one and looked for in the other reads
+# as "no token"). Once the new dir exists it wins.
+cfgdir_of() { ( HOME="$1"; . "$REPO_SRC/lib/config-dir.sh"; echo "$QA_CONFIG_DIR $QA_CONFIG_DIR_LEGACY" ); }
+h=$(mktemp -d)
+eq "config dir: neither exists -> new"  "$(cfgdir_of "$h")" "$h/.config/qa-panel false"
+mkdir -p "$h/.config/claude-qa-manager"
+eq "  only the old one -> old, flagged"  "$(cfgdir_of "$h")" "$h/.config/claude-qa-manager true"
+mkdir -p "$h/.config/qa-panel"
+eq "  both -> new"                       "$(cfgdir_of "$h")" "$h/.config/qa-panel false"
+rm -rf "$h"
+
+d=$(mkrepo "https://gitlab.com/o/r.git"); bin="$d/bin"; mkstub "$bin"
+mkdir -p "$d/home/.config/claude-qa-manager"
+( cd "$d" && HOME="$d/home" PATH="$bin:$PATH" QA_AGENT_TOKEN="good-token" \
+    bash "$INIT" token </dev/null >/dev/null 2>&1 )
+eq "old config dir only: token stored there" \
+   "$(cat "$d/home/.config/claude-qa-manager/qa-agent-token" 2>/dev/null)" "good-token"
+eq "  and no new dir created beside it" \
+   "$( [ -e "$d/home/.config/qa-panel" ] && echo created || echo absent )" "absent"
+eq "  check reports the old location" \
+   "$( cd "$d" && HOME="$d/home" PATH="$bin:$PATH" bash "$INIT" check </dev/null 2>&1 | grep -c 'old config dir' )" "1"
+rm -rf "$d"
+
+# Only lib/config-dir.sh may spell the config dir. A second spelling is how the
+# token's writer and reader drift apart; comments are exempt.
+eq "config dir spelled only in config-dir.sh" \
+   "$(grep -n '\.config/\(qa-panel\|claude-qa-manager\)' "$REPO_SRC"/lib/*.sh \
+      | grep -v '^[^:]*config-dir\.sh:' | grep -v '^[^:]*:[0-9]*:[[:space:]]*#' | wc -l | tr -d ' ')" "0"
 
 # ---------------------------------------------------------------------------
 # A project whose fixes cannot be run is the tail-chasing generator: the fix ships

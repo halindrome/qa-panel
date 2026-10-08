@@ -1,6 +1,6 @@
 # Working in this repo
 
-`claude-qa-manager` is a Claude Code plugin providing structured multi-round QA for merge
+`qa-panel` is a Claude Code plugin providing structured multi-round QA for merge
 and pull requests. It was extracted from a private implementation with several hundred real
 review rounds behind it, then generalised and open-sourced.
 
@@ -11,10 +11,10 @@ already made (with reasons) so they are not relitigated.
 
 ```bash
 bash test/preflight.test.sh          # 894 passed / 0 failed  (~4 min: 54 sections, real git fixtures)
-bash test/init.test.sh               #  32 passed / 0 failed
+bash test/init.test.sh               #  39 passed / 0 failed
 bash test/no-private-identifiers.sh  # must print ok
 claude plugin validate .
-claude --plugin-dir . plugin details claude-qa-manager   # inventory + token cost
+claude --plugin-dir . plugin details qa-panel   # inventory + token cost
 ```
 
 `--plugin-dir` loads the plugin for one session only, so you can test without installing.
@@ -53,8 +53,8 @@ jq -r '.halindrome | .source.source, .installLocation' \
 
 # Decisive, and needs no reasoning at all: ask the INSTALLED plugin what it loads,
 # from a neutral cwd with no --plugin-dir, then compare with this tree's numbers.
-( cd /tmp && claude plugin details claude-qa-manager )
-claude --plugin-dir . plugin details claude-qa-manager
+( cd /tmp && claude plugin details qa-panel )
+claude --plugin-dir . plugin details qa-panel
 
 grep -o '[^"]*lib/preflight\.sh' <the round's transcript>   # the path it really sourced
 ```
@@ -169,7 +169,7 @@ reviewer, which defeats the cycle. Narrow `lens_tags` or the panel width instead
 
 Config resolves in three layers, later winning, **recursively** merged —
 `lib/preflight.sh:122` is `jq -s '.[0] * .[1] * .[2]'`, and jq's `*` merges objects deeply:
-shipped `config/defaults.json` → user `~/.config/claude-qa-manager/config.json` →
+shipped `config/defaults.json` → user `~/.config/qa-panel/config.json` →
 project `<repo>/.claude/skills/qa-cycle/config.json`.
 
 The distinction matters: under a shallow merge a project setting `verify.command` would

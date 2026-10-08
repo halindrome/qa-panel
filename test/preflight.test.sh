@@ -103,6 +103,8 @@ mkfixture() {
   # Likewise the REAL verify detector: preflight shells out to it, and a stub here
   # would assert against a copy of the logic instead of the logic.
   cp "$REPO_SRC/lib/detect-verify.sh" "$plugin/lib/"
+  # And the real config-dir resolver, which preflight sources for the user layer.
+  cp "$REPO_SRC/lib/config-dir.sh" "$plugin/lib/"
 
   # Project layer only. Credentials/policy would normally arrive from the user
   # layer; the fixture puts everything here so a case can rewrite one file.
@@ -229,7 +231,7 @@ SH
 # repo; the plugin lives outside that tree entirely. The subshell keeps the cd from
 # leaking into the suite.
 # HOME is overridden because preflight merges a USER config layer from
-# $HOME/.config/claude-qa-manager/config.json. Without this, a developer's real
+# $HOME/.config/qa-panel/config.json. Without this, a developer's real
 # user config merges into every fixture and the suite is not hermetic: it would
 # pass or fail differently on their machine than in CI.
 #
@@ -665,20 +667,20 @@ base=$(( $(date +%s) - 4000 ))
 # statistic must be the 600s gap, NOT the ~150s mean spacing of the five returns.
 mkscratch "$tdir/r1" "$base" $((base+600)) $((base+650)) $((base+700)) $((base+750)) $((base+800))
 HOME="$thome" bash "$REC" "$tdir/r1" >/dev/null 2>&1
-row=$(cat "$thome"/.config/claude-qa-manager/timings/*.tsv 2>/dev/null | tail -1)
+row=$(cat "$thome"/.config/qa-panel/timings/*.tsv 2>/dev/null | tail -1)
 eq "max gap is the long silence" "$(awk -F'\t' '{print $6}' <<<"$row")" "600"
 eq "  lens count recorded"       "$(awk -F'\t' '{print $5}' <<<"$row")" "5"
 eq "  project path recorded"     "$(awk -F'\t' '{print $2}' <<<"$row")" "/repo/a"
-eq "  history is outside the repo" "$( [ -d "$thome/.config/claude-qa-manager/timings" ] && echo yes || echo no )" "yes"
+eq "  history is outside the repo" "$( [ -d "$thome/.config/qa-panel/timings" ] && echo yes || echo no )" "yes"
 # A second round appends rather than replacing — a distribution needs every sample.
 mkscratch "$tdir/r2" "$base" $((base+120))
 HOME="$thome" bash "$REC" "$tdir/r2" >/dev/null 2>&1
-eq "rounds accumulate"           "$(cat "$thome"/.config/claude-qa-manager/timings/*.tsv | wc -l | tr -d ' ')" "2"
+eq "rounds accumulate"           "$(cat "$thome"/.config/qa-panel/timings/*.tsv | wc -l | tr -d ' ')" "2"
 # No fan-out stamp => the biggest silence is unmeasurable, so record NOTHING rather
 # than a row that quietly omits it.
 mkdir -p "$tdir/r3"; printf '706|x|1|done|6|6|%s|/repo/a|1200\n' "$base" > "$tdir/r3/status"
 HOME="$thome" bash "$REC" "$tdir/r3" >/dev/null 2>&1
-eq "no fanout stamp -> no row"   "$(cat "$thome"/.config/claude-qa-manager/timings/*.tsv | wc -l | tr -d ' ')" "2"
+eq "no fanout stamp -> no row"   "$(cat "$thome"/.config/qa-panel/timings/*.tsv | wc -l | tr -d ' ')" "2"
 rm -rf "$tdir" "$thome"
 
 # ---------------------------------------------------------------------------
@@ -2982,8 +2984,8 @@ eq "  passes --strict-mcp-config" \
    "$(case "$argv" in (*--strict-mcp-config*) echo yes ;; (*) echo no ;; esac)" "yes"
 eq "  passes --json-schema (the format is forced, not requested)" \
    "$(case "$argv" in (*--json-schema*) echo yes ;; (*) echo no ;; esac)" "yes"
-eq "  passes --agent claude-qa-manager:qa-reviewer" \
-   "$(case "$argv" in (*"--agent claude-qa-manager:qa-reviewer"*) echo yes ;; (*) echo no ;; esac)" "yes"
+eq "  passes --agent qa-panel:qa-reviewer" \
+   "$(case "$argv" in (*"--agent qa-panel:qa-reviewer"*) echo yes ;; (*) echo no ;; esac)" "yes"
 # Always an explicit --model: omitting it would inherit the operator's session
 # model, which is how a Haiku session gets a Haiku panel (invariant 6).
 eq "  passes --model review_model explicitly" \
@@ -3072,15 +3074,15 @@ printf 'snap\n' > "$S/tree-after.txt"
 proj="$sq/home/.config/claude-code/projects/-repo"; mkdir -p "$proj/sid1/subagents"
 {
   # an earlier round's reviewer: outside the window, must be ignored
-  jq -nc --arg t "$(iso $((now - 5000)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"old",name:"Agent",input:{subagent_type:"claude-qa-manager:qa-reviewer"}}]}}'
+  jq -nc --arg t "$(iso $((now - 5000)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"old",name:"Agent",input:{subagent_type:"qa-panel:qa-reviewer"}}]}}'
   # a manager call in the window: not a reviewer, must be ignored
-  jq -nc --arg t "$(iso $((now - 550)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"mgr",name:"Agent",input:{subagent_type:"claude-qa-manager:qa-manager"}}]}}'
+  jq -nc --arg t "$(iso $((now - 550)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"mgr",name:"Agent",input:{subagent_type:"qa-panel:qa-manager"}}]}}'
   # THIS round's reviewer
-  jq -nc --arg t "$(iso $((now - 500)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"this",name:"Agent",input:{subagent_type:"claude-qa-manager:qa-reviewer"}}]}}'
+  jq -nc --arg t "$(iso $((now - 500)))" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"this",name:"Agent",input:{subagent_type:"qa-panel:qa-reviewer"}}]}}'
   echo "{\"type\":\"user\",\"message\":{\"content\":\"scratch is /tmp/qa-cycle-abc123-77\"}}"
 } > "$proj/sid1.jsonl"
 for id in old this; do
-  printf '{"agentType":"claude-qa-manager:qa-reviewer","toolUseId":"%s"}\n' "$id" > "$proj/sid1/subagents/agent-$id.meta.json"
+  printf '{"agentType":"qa-panel:qa-reviewer","toolUseId":"%s"}\n' "$id" > "$proj/sid1/subagents/agent-$id.meta.json"
 done
 a() { jq -nc --arg t "$(iso "$1")" --arg id "$2" --arg n "$3" --argjson i "$4" '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:$id,name:$n,input:$i}]}}'; }
 u() { jq -nc --arg t "$(iso "$1")" --arg id "$2" --argjson e "$3" --arg c "$4" '{type:"user",timestamp:$t,message:{content:[{type:"tool_result",tool_use_id:$id,is_error:$e,content:$c}]}}'; }

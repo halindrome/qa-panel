@@ -322,7 +322,7 @@ for lens in $LENSES; do
 
   (
     set -- -p --model "$model"
-    set -- "$@" --plugin-dir "$PLUGIN" --agent claude-qa-manager:qa-reviewer \
+    set -- "$@" --plugin-dir "$PLUGIN" --agent qa-panel:qa-reviewer \
                 --strict-mcp-config --mcp-config "$LENS_MCP" \
                 --no-session-persistence --settings "$HOOKS" \
                 --output-format json --json-schema "$SCHEMA"

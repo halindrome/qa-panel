@@ -1,4 +1,4 @@
-# Contributing to claude-qa-manager
+# Contributing to qa-panel
 
 Thanks for considering a contribution. Bug reports, measurements from real review rounds,
 and fixes are all welcome.
@@ -49,7 +49,7 @@ claude plugin validate .
 ```
 
 If you changed `skills/qa-cycle/SKILL.md`, also run
-`claude --plugin-dir . plugin details claude-qa-manager` and report the on-invoke token
+`claude --plugin-dir . plugin details qa-panel` and report the on-invoke token
 cost in the PR. The spine is kept deliberately small. New depth goes in `references/`,
 which costs nothing until read, and a rise in the spine's cost needs a reason.
 

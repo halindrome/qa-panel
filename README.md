@@ -1,4 +1,4 @@
-# claude-qa-manager
+# qa-panel
 
 A Claude Code plugin for running **structured, multi-round QA** on a merge request or pull
 request — and for knowing when to stop.
@@ -37,7 +37,7 @@ plugin is designed to let it say so.
 
 ## Status
 
-**v0.4.1 — early.** Extracted from a private implementation that has run hundreds of real
+**v0.5.0 — early.** Extracted from a private implementation that has run hundreds of real
 review rounds, then generalised. The design is battle-tested; this packaging is new.
 
 ## Requirements
@@ -53,20 +53,34 @@ does not matter.
 ## Install
 
 ```bash
-claude plugin marketplace add halindrome/claude-qa-manager
-claude plugin install claude-qa-manager@halindrome
+claude plugin marketplace add halindrome/qa-panel
+claude plugin install qa-panel@halindrome
 ```
 
 Restart Claude Code afterwards. `/qa-init` and `/qa-cycle` should then appear when you
 type `/`.
 
-Update with `claude plugin marketplace update halindrome && claude plugin update claude-qa-manager@halindrome`.
+Update with `claude plugin marketplace update halindrome && claude plugin update qa-panel@halindrome`.
 
 To try it without installing:
 
 ```bash
-claude --plugin-dir /path/to/claude-qa-manager
+claude --plugin-dir /path/to/qa-panel
 ```
+
+**Upgrading from `claude-qa-manager`** (the name before 0.5.0, which Claude Code now
+reserves): swap the install, then restart Claude Code.
+
+```bash
+claude plugin uninstall claude-qa-manager@halindrome
+claude plugin marketplace update halindrome
+claude plugin install qa-panel@halindrome
+```
+
+Your settings, QA token and timing history in `~/.config/claude-qa-manager/` keep working
+where they are. `/qa-init` notes the old location; move it with
+`mv ~/.config/claude-qa-manager ~/.config/qa-panel` when convenient, and update
+`qa_agent.token_file` if you set it explicitly.
 
 ## Quick start
 
@@ -201,7 +215,7 @@ defaults, and a later layer overrides single keys rather than whole blocks:
 
 | File | Applies to | Typically holds |
 |---|---|---|
-| `~/.config/claude-qa-manager/config.json` | every repository you review | your QA identity, second-opinion reviewers, flag defaults |
+| `~/.config/qa-panel/config.json` | every repository you review | your QA identity, second-opinion reviewers, flag defaults |
 | `<repo>/.claude/skills/qa-cycle/config.json` | one repository (commit it) | schema files, monorepo targets |
 
 A user config that names a QA account, adds one second-opinion reviewer, and runs it on

@@ -1,9 +1,9 @@
 ---
 name: qa-init
-description: "Set up the current project to use claude-qa-manager. Detects the forge from the git remote, checks required tooling and authentication, writes the optional project config (targets for a monorepo, schema-gate paths), and walks the operator through storing a QA agent token. Use when someone asks to install, initialise, configure, or set up QA rounds in a repo, or when /qa-cycle reports missing configuration."
+description: "Set up the current project to use qa-panel. Detects the forge from the git remote, checks required tooling and authentication, writes the optional project config (targets for a monorepo, schema-gate paths), and walks the operator through storing a QA agent token. Use when someone asks to install, initialise, configure, or set up QA rounds in a repo, or when /qa-cycle reports missing configuration."
 ---
 
-# Set up claude-qa-manager in this project
+# Set up qa-panel in this project
 
 Deliberately thin. The mechanics live in `${CLAUDE_PLUGIN_ROOT}/lib/init.sh`, which is
 tested; this file only decides *which* subcommand to run and asks the judgment

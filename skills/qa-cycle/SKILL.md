@@ -301,7 +301,7 @@ verdict + a `decisions_needed` list. The panel is preflight-selected (3-6 lenses
 capped at 6). The full contract lives in `agents/qa-manager.md`; this step is the
 main-loop side — how to invoke it and what to do with the verdict.
 
-**Invoke it** with the Agent tool, `subagent_type: "claude-qa-manager:qa-manager"` and
+**Invoke it** with the Agent tool, `subagent_type: "qa-panel:qa-manager"` and
 **`run_in_background: true`** — not optional: a foreground return lands the whole round
 in this context, the one thing the manager exists to prevent. A backgrounded agent
 returns a stub and a transcript pointer you must never read. A `completed` notice with
@@ -316,7 +316,7 @@ DOUBLE=<t|f>  TRIPLE=<t|f>  reviewer_override=<a configured reviewer name|"">
 skip_contract_verification=<true|false>
 ```
 
-**Always the plugin-qualified `claude-qa-manager:` prefix and never a `model`
+**Always the plugin-qualified `qa-panel:` prefix and never a `model`
 parameter**, wherever an agent is spawned: a bare name fails once a sibling QA plugin
 claims it, and `model` overrides the agents' pinned frontier model (invariant 6).
 
@@ -523,7 +523,7 @@ changed no code. A round that fixed only minors is **not** a clean round; see St
 commit (`skipped:no-fix-commit`). Round 1's fixes sit on author code with a full panel
 behind them; 0 of 106 measured round-1 records carried a self-inflicted finding.
 
-From round 2 on, spawn **one** `claude-qa-manager:qa-reviewer` over just this round's
+From round 2 on, spawn **one** `qa-panel:qa-reviewer` over just this round's
 fix commit, before the note posts:
 
 - `skip_contract_verification=true` — the full panel verified the contract this round;

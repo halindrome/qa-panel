@@ -68,7 +68,7 @@ for root in $roots; do
         | select($t >= $t0 and $t <= $t1)
         | .message.content[]
         | select(.type == "tool_use" and .name == "Agent"
-                 and .input.subagent_type == "claude-qa-manager:qa-reviewer")
+                 and .input.subagent_type == "qa-panel:qa-reviewer")
         | .id' "$main" 2>/dev/null); do
       meta=$(grep -rl --include='*.meta.json' "\"toolUseId\":\"$id\"" "${main%.jsonl}/subagents" 2>/dev/null | head -1)
       [ -n "$meta" ] && [ -f "${meta%.meta.json}.jsonl" ] && subs+=("${meta%.meta.json}.jsonl")

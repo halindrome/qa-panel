@@ -106,7 +106,7 @@ state, and a silent all-false is the failure invariant 2 exists to prevent.
 > cost is one line of evidence per finding; the avoided cost is rubber-stamping
 > fabricated bugs.
 
-Use `subagent_type: "claude-qa-manager:qa-reviewer"` — the agent defined in
+Use `subagent_type: "qa-panel:qa-reviewer"` — the agent defined in
 `agents/qa-reviewer.md`, named with its plugin prefix. The bare `qa-reviewer` resolves
 only while nothing else on the machine claims that name; where a sibling QA plugin is
 installed the spawn fails outright, which is a hard stop mid-round. Pass **no `model`
