@@ -1214,7 +1214,7 @@ Four things this work found that are worth not relearning:
    the command, bound, timings path and policy itself, so `verify.command` never passes
    through a shell line the model has to re-quote. That removed four arguments from the
    spine as well as an error class.
-5. **The config merge is recursive, not shallow.** `preflight.sh:122` is
+5. **The config merge is recursive, not shallow.** `preflight.sh:121` is
    `jq -s '.[0] * .[1] * .[2]'` and jq's `*` merges objects deeply, so a project overriding
    `verify.command` still inherits the shipped `verify.timeout_seconds`. `CLAUDE.md` claimed
    the opposite until today, and a guard was written for a failure that could not happen.

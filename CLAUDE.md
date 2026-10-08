@@ -168,7 +168,7 @@ reviewer, which defeats the cycle. Narrow `lens_tags` or the panel width instead
     docs/              CASE-STUDIES, CONFIGURING, ROADMAP
 
 Config resolves in three layers, later winning, **recursively** merged —
-`lib/preflight.sh:122` is `jq -s '.[0] * .[1] * .[2]'`, and jq's `*` merges objects deeply:
+`lib/preflight.sh:121` is `jq -s '.[0] * .[1] * .[2]'`, and jq's `*` merges objects deeply:
 shipped `config/defaults.json` → user `~/.config/qa-panel/config.json` →
 project `<repo>/.claude/skills/qa-cycle/config.json`.
 
