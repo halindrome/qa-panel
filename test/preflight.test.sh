@@ -2574,9 +2574,16 @@ eq "  a user-only entry survives the project layer"        "$(jq -r '.performanc
 rm -rf "$r"
 # Wrong types are fatal: a dropped extra is a lens quietly not enforcing the rules.
 for _f in '.lenses = ["api-envelope"]' '.lenses."api-envelope".extra = 42' \
-          '.lenses."api-envelope" = "text"' '.lenses."ui-styling".focus = ["a"]'; do
+          '.lenses."api-envelope" = "text"' '.lenses."ui-styling".focus = ["a"]' \
+          '.lenses."ui-styling".focus = null' '.lenses."ui-styling".focus = ""'; do
   r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
   run_preflight "$r" 73 mono >/dev/null; eq "lenses config '$_f' -> exit 2" "$?" "2"
+  rm -rf "$r"
+done
+# An empty or null `extra` is how a later layer unsets an inherited one: allowed.
+for _f in '.lenses."api-envelope".extra = null' '.lenses."api-envelope".extra = ""'; do
+  r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
+  run_preflight "$r" 73 mono >/dev/null; eq "lenses config '$_f' -> runs (unsets extra)" "$?" "0"
   rm -rf "$r"
 done
 # An unknown lens name is warned (projects cannot add lenses) and never resolved.
@@ -3432,14 +3439,19 @@ rm -rf "$p"
 
 # --- no resolved catalog is fatal: never a silent fallback to the shipped one ---
 # A fallback would drop every project convention while the panel reported normally.
+# The shipped catalog is planted exactly where a fallback would look, so a driver
+# that fell back would compose prompts and these assertions would fail.
 for _case in absent-key missing-file; do
   p=$(mkpanel)
+  cp "$REPO_SRC/config/lens-catalog.json" "$p/plugin/config/"
   case "$_case" in
     absent-key)   sed -i.bak '/^lens_catalog_path=/d' "$p/scratch/manager-brief.txt" ;;
     missing-file) rm -f "$p/scratch/resolved-catalog.json" ;;
   esac
   run_panel "$p" >/dev/null; rc=$?
   eq "resolved catalog $_case -> die_internal (exit 5)" "$rc" "5"
+  eq "  the error names the missing resolved catalog" \
+     "$(grep -c 'no resolved lens catalog' "$p/panel.err")" "1"
   eq "  no prompt composed" "$(ls "$p/scratch"/prompt-*.txt 2>/dev/null | wc -l | tr -d ' ')" "0"
   rm -rf "$p"
 done

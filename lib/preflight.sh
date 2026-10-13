@@ -259,11 +259,15 @@ for _lp in lenses "targets.$TARGET.lenses"; do
     object|null) ;;
     *) die_usage "$_lp must be an object keyed by lens name (found: $_type), e.g. {\"api-envelope\":{\"extra\":\"...\"}}." ;;
   esac
+  # A present `focus` must be a NON-EMPTY string: null or "" would overwrite the
+  # shipped focus with nothing and drop the lens from the panel. An `extra` of null
+  # or "" is allowed -- that is how a later layer unsets an inherited one.
   _bad=$(jq -r --arg t "$TARGET" "[$_sel // {} | to_entries[]
       | select((.value | type) != \"object\"
-               or ([.value.focus, .value.extra][] | (. != null and type != \"string\")))
+               or (.value | has(\"focus\") and ((.focus | type) != \"string\" or .focus == \"\"))
+               or (.value.extra | . != null and type != \"string\"))
       | .key] | join(\" \")" "$BB" 2>/dev/null || echo "")
-  [ -z "$_bad" ] || die_usage "$_lp entries must be objects whose focus/extra are strings; bad: $_bad"
+  [ -z "$_bad" ] || die_usage "$_lp entries must be objects whose focus is a non-empty string and extra a string; bad: $_bad"
   _unk=$(jq -r --arg t "$TARGET" --arg re "$KNOWN_LENS_NAMES_RE" --arg lp "$_lp" \
     "[$_sel // {} | keys[] | select(test(\$re) | not) | \"\(\$lp).\(.)\"] | join(\" \")" "$BB" 2>/dev/null || echo "")
   [ -z "$_unk" ] || UNKNOWN_LENS_CONFIG_KEYS="${UNKNOWN_LENS_CONFIG_KEYS:+$UNKNOWN_LENS_CONFIG_KEYS }$_unk"

@@ -319,7 +319,7 @@ fail_lens() {  # $1 lens, $2 state, $3 rc, $4 detail
 # ---------------------------------------------------------------------------
 for lens in $LENSES; do
   if ! compose "$lens"; then
-    fail_lens "$lens" "unknown_lens" 0 "no entry in config/lens-catalog.json"
+    fail_lens "$lens" "unknown_lens" 0 "no focus for this lens in the resolved catalog $CATALOG"
     continue
   fi
   model=$(resolve_model "$lens")

@@ -202,10 +202,17 @@ let a user or project config specialise one, keyed by **lens name**:
   different layers all survive.
 - It is an object rather than an array because the layers merge with jq `*`, which
   merges objects key by key but replaces an array whole.
-- A non-object entry, or a non-string `focus`/`extra`, stops preflight (exit 2): a
-  silently dropped convention is a lens that stops enforcing it while reporting normally.
+- A non-object entry, a `focus` that is not a non-empty string, or a non-string `extra`
+  stops preflight (exit 2): a silently dropped convention is a lens that stops enforcing
+  it while reporting normally, and an empty `focus` would erase the lens's mandate. An
+  `extra` of `null` or `""` is allowed, and is how a later layer unsets an inherited one.
   An unknown lens name warns `unknown_lens_config_keys`. Projects extend the shipped
   lenses; they cannot add new ones.
+- **The project config is trusted input, and it is read from the branch under review.**
+  An MR that edits it can change what this round's lenses are told to check, the
+  security lens included, just as it can already change `verify.command` or the review
+  model. The edit is visible in the diff; review a change to
+  `.claude/skills/qa-cycle/config.json` as you would a change to CI.
 
 ### Per sub-project, in a monorepo
 
