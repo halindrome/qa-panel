@@ -247,18 +247,27 @@ LENS_MODELS_JSON=$(jq -c '.review.lens_models // {}' "$BB")
 # arrays whole, so a project array would silently erase every user-layer entry.
 # A wrong type is fatal rather than skipped -- a dropped `extra` is a lens that
 # quietly stops enforcing the project's rules while reporting as a full panel member.
-LENS_CONFIG_TYPE=$(jq -r '.lenses | type' "$BB" 2>/dev/null || echo "null")
-case "$LENS_CONFIG_TYPE" in
-  object|null) ;;
-  *) die_usage "lenses must be an object keyed by lens name (found: $LENS_CONFIG_TYPE), e.g. {\"api-envelope\":{\"extra\":\"...\"}}." ;;
-esac
-BAD_LENS_CONFIG=$(jq -r '[.lenses // {} | to_entries[]
-    | select((.value | type) != "object"
-             or ([.value.focus, .value.extra][] | (. != null and type != "string")))
-    | .key] | join(" ")' "$BB" 2>/dev/null || echo "")
-[ -z "$BAD_LENS_CONFIG" ] || die_usage "lenses entries must be objects whose focus/extra are strings; bad: $BAD_LENS_CONFIG"
-UNKNOWN_LENS_CONFIG_KEYS=$(jq -r --arg re "$KNOWN_LENS_NAMES_RE" \
-  '[.lenses // {} | keys[] | select(test($re) | not)] | join(" ")' "$BB" 2>/dev/null || echo "")
+#
+# `targets.<t>.lenses` has the same shape and overlays the top-level `lenses` for
+# that target only, so a monorepo can scope one sub-project's conventions to it.
+# Only the selected target is checked, as with lens_tags.
+UNKNOWN_LENS_CONFIG_KEYS=""
+for _lp in lenses "targets.$TARGET.lenses"; do
+  _sel='.lenses'; [ "$_lp" = lenses ] || _sel='.targets[$t].lenses'
+  _type=$(jq -r --arg t "$TARGET" "$_sel | type" "$BB" 2>/dev/null || echo "null")
+  case "$_type" in
+    object|null) ;;
+    *) die_usage "$_lp must be an object keyed by lens name (found: $_type), e.g. {\"api-envelope\":{\"extra\":\"...\"}}." ;;
+  esac
+  _bad=$(jq -r --arg t "$TARGET" "[$_sel // {} | to_entries[]
+      | select((.value | type) != \"object\"
+               or ([.value.focus, .value.extra][] | (. != null and type != \"string\")))
+      | .key] | join(\" \")" "$BB" 2>/dev/null || echo "")
+  [ -z "$_bad" ] || die_usage "$_lp entries must be objects whose focus/extra are strings; bad: $_bad"
+  _unk=$(jq -r --arg t "$TARGET" --arg re "$KNOWN_LENS_NAMES_RE" --arg lp "$_lp" \
+    "[$_sel // {} | keys[] | select(test(\$re) | not) | \"\(\$lp).\(.)\"] | join(\" \")" "$BB" 2>/dev/null || echo "")
+  [ -z "$_unk" ] || UNKNOWN_LENS_CONFIG_KEYS="${UNKNOWN_LENS_CONFIG_KEYS:+$UNKNOWN_LENS_CONFIG_KEYS }$_unk"
+done
 
 # The floor is an enumerated allow-list, never a strength ranking: the plugin does
 # not order models, the operator names the acceptable ones. An entry admits any id
@@ -1995,14 +2004,16 @@ done
 LENSES_JSON=$(printf '%s\n' "${LENSES[@]}" | jq -R . | jq -s .)
 
 # The catalog the lenses actually read: shipped generic focus text with the
-# merged config's `lenses` overlaid. run-panel.sh reads ONLY this file and has no
-# fallback to the shipped one, because a fallback would drop a project's
-# conventions while the panel reported normally. Unknown names were warned above
-# and are filtered out here, so they cannot reach a prompt. NOT named lens-*.json:
-# round-return.sh and lens-landed.sh count that glob as landed lenses.
+# merged config's `lenses` overlaid, then this target's `targets.<t>.lenses`.
+# run-panel.sh reads ONLY this file and has no fallback to the shipped one,
+# because a fallback would drop a project's conventions while the panel reported
+# normally. Unknown names were warned above and are filtered out here, so they
+# cannot reach a prompt. NOT named lens-*.json: round-return.sh and
+# lens-landed.sh count that glob as landed lenses.
 LENS_CATALOG="$QA_SCRATCH/resolved-catalog.json"
-jq -s --arg re "$KNOWN_LENS_NAMES_RE" \
-  '.[0] * (.[1].lenses // {} | with_entries(select(.key | test($re))))' \
+jq -s --arg re "$KNOWN_LENS_NAMES_RE" --arg t "$TARGET" \
+  'def known: with_entries(select(.key | test($re)));
+   .[0] * (.[1].lenses // {} | known) * (.[1].targets[$t].lenses // {} | known)' \
   "$PLUGIN_ROOT/config/lens-catalog.json" "$BB" > "$LENS_CATALOG" 2>/dev/null \
   || die_internal "could not resolve the lens catalog into $LENS_CATALOG"
 

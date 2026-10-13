@@ -2584,8 +2584,32 @@ r=$(mkfixture "feature/x" "main" '.lenses."api-contract".extra = "x"'); commit_l
 out=$(run_preflight "$r" 73 mono); rc=$?; c=$(rcat "$out")
 eq "unknown lens config key -> still runs" "$rc" "0"
 eq "  warned as unknown_lens_config_keys" \
-   "$(jq -r '[.warnings[]|select(startswith("unknown_lens_config_keys:api-contract"))]|length' <<<"$out")" "1"
+   "$(jq -r '[.warnings[]|select(startswith("unknown_lens_config_keys:lenses.api-contract"))]|length' <<<"$out")" "1"
 eq "  and absent from the resolved catalog" "$(jq -r 'has("api-contract")' <<<"$c")" "false"
+rm -rf "$r"
+# targets.<t>.lenses scopes conventions to one sub-project of a monorepo: it beats
+# the top-level layer for that target, and no other target sees it.
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "TOP"
+  | .targets.mono.lenses."api-envelope".extra = "MONO"
+  | .targets.other = (.targets.mono | del(.lenses))
+  | .targets.other.lenses."ui-styling".extra = "OTHER-ONLY"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "target lenses override top-level lenses for that target" "$(jq -r '."api-envelope".extra' <<<"$c")" "MONO"
+eq "  another target's lenses do not leak in" "$(jq -r '."ui-styling".extra // "none"' <<<"$c")" "none"
+rm -rf "$r"
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "TOP"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "  a target without lenses inherits the top-level ones" "$(jq -r '."api-envelope".extra' <<<"$c")" "TOP"
+rm -rf "$r"
+for _f in '.targets.mono.lenses = ["api-envelope"]' '.targets.mono.lenses."api-envelope".extra = 42'; do
+  r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
+  run_preflight "$r" 73 mono >/dev/null; eq "target lenses config '$_f' -> exit 2" "$?" "2"
+  rm -rf "$r"
+done
+r=$(mkfixture "feature/x" "main" '.targets.mono.lenses."api-contract".extra = "x"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono)
+eq "unknown target lens key -> warned with its full path" \
+   "$(jq -r '[.warnings[]|select(contains("targets.mono.lenses.api-contract"))]|length' <<<"$out")" "1"
 rm -rf "$r"
 # The shipped text must stay generic. These are one organisation's conventions;
 # they belong in that project's `lenses.<name>.extra`, never in the catalog.

@@ -207,6 +207,28 @@ let a user or project config specialise one, keyed by **lens name**:
   An unknown lens name warns `unknown_lens_config_keys`. Projects extend the shipped
   lenses; they cannot add new ones.
 
+### Per sub-project, in a monorepo
+
+A target can carry its own `lenses`, with the same shape. It applies on top of the
+top-level `lenses` for that target only, so one sub-project's conventions do not reach
+the others:
+
+```json
+{
+  "lenses": { "regression-edges": { "extra": "Applies to every target." } },
+  "targets": {
+    "api":   { "path": "apps/api", "lens_tags": ["schema", "api"],
+               "lenses": { "api-envelope": { "extra": "Every response is {ok, error, data}." } } },
+    "rpc":   { "path": "apps/rpc", "lens_tags": ["api"],
+               "lenses": { "api-envelope": { "extra": "JSON-RPC 2.0 result/error objects." } } }
+  }
+}
+```
+
+The order is shipped text, then top-level `lenses` (user layer, then project layer), then
+`targets.<name>.lenses`, the last winning per field. Put a rule at the top level only when
+it is true of every target that enables the lens.
+
 Preflight writes the resolved result to `$QA_SCRATCH/resolved-catalog.json`, which is the only
 catalog the lenses read. Inspect it to see exactly what each lens was told.
 
