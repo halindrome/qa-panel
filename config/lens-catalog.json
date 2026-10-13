@@ -1,42 +1,42 @@
 {
-  "$comment": "Per-lens focus text, keyed by the names lib/preflight.sh can emit in `lenses`. Lifted verbatim from the prose catalog that lived in agents/qa-manager.md, so that lib/run-panel.sh can compose a lens prompt without a model transcribing it. Data, not instructions: preflight decides WHICH lenses run and that selection is not second-guessed here. A name in `lenses` with no entry here is a hard error in the driver -- never an invented mandate, which is how a lens silently reviews nothing in particular. The `_core` flag is documentation; preflight owns the actual selection.",
+  "$comment": "Per-lens focus text, keyed by the names lib/preflight.sh can emit in `lenses`. Each focus states, generically, the CONTRACT the lens verifies; project-specific conventions do NOT belong here. A project or user config adds them with `lenses.<name>.extra` (appended to the prompt as 'Project conventions') or replaces a focus with `lenses.<name>.focus`; preflight resolves the three layers plus this file into $QA_SCRATCH/resolved-catalog.json, and run-panel.sh reads only that. Data, not instructions: preflight decides WHICH lenses run. A name in `lenses` with no entry here is a hard error in the driver -- never an invented mandate, which is how a lens silently reviews nothing in particular. The `_core` flag is documentation; preflight owns the actual selection.",
 
   "contract-security": {
     "_core": true,
-    "focus": "OWNS the Contract Verification table. Verify every acceptance criterion in the contract file against the diff; weigh the NEW-vs-baseline SAST findings in the SAST report. Security posture of the change (auth, injection, secret/token handling)."
+    "focus": "OWNS the Contract Verification table. The contract here is the ticket: verify every acceptance criterion in the contract file against the diff, marking each met, partially met, or unmet with the evidence. Then the trust-boundary contract: the change must not weaken authentication, authorisation, input validation, injection safety, or the handling of secrets and tokens. Weigh the NEW-vs-baseline SAST findings in the SAST report; a pre-existing finding the diff does not touch is not this round's defect."
   },
 
   "regression-edges": {
     "_core": true,
-    "focus": "Regressions, backward-compat, null/empty/huge inputs, mid-flight failures, concurrency, downstream callers of modified functions; guarantees the change silently drops."
+    "focus": "The contract with existing callers: everything that relied on the old behaviour must still hold. Trace downstream callers of modified functions; check backward compatibility of signatures, defaults, and side effects; probe null, empty, and very large inputs, partial or mid-flight failure, retries, and concurrency. A finding is a guarantee the change silently drops or a caller it breaks, not a style preference."
   },
 
   "test-quality": {
     "_core": true,
-    "focus": "Test-coverage gaps for the change AND an audit of the tests THEMSELVES: do they actually exercise the code, or pass vacuously? Drive the suite; where feasible, mutate the code under test and confirm the tests notice. A test that passes against broken code is a finding. (This is the role that, on this skill's own MR, caught a test suite where 7 of 8 deliberate breaks shipped green.)"
+    "focus": "The contract that changed behaviour is pinned: a plausible break in the changed code must make some test fail. Find coverage gaps for the change AND audit the tests THEMSELVES -- for each relevant assertion, reason about whether it would still pass against broken code (vacuous asserts, mocks that replace the logic under test, assertions on a re-implemented copy of production logic). You are read-only: reason about mutations, do not run or edit the suite. A test that would pass against broken code is a finding."
   },
 
   "schema-propagation": {
     "_core": false,
     "_when": "conditional; DB/schema changes",
-    "focus": "Schema-change propagation to the configured schema file(s) -- the file(s) a provisioner reads to create a new instance -- AND code-only schema dependencies (code reading/writing a column or table not present in the base file, even with no .sql change: the production-outage class in docs/CASE-STUDIES.md section schema-drift, and the ONLY mechanism that catches it, so this lens is selected by the `schema` tag whether or not a schema file changed). Evidence is in the schema-change report. Surface and judge propagation; do NOT judge rollout readiness (that is the human gate)."
+    "focus": "The persisted-shape contract: every schema change reaches the configured schema file(s) -- the file(s) a provisioner reads to create a new instance -- and no code depends on schema the base file lacks. Check BOTH directions: DDL that never reached the schema file, and code-only schema dependencies (code reading or writing a column or table absent from the base file, even with no .sql change; see docs/CASE-STUDIES.md section schema-drift). Evidence is in the schema-change report. Surface and judge propagation; do NOT judge rollout readiness (that is the human gate)."
   },
 
   "api-envelope": {
     "_core": false,
     "_when": "conditional; API services",
-    "focus": "The {reqStatus, errorMessage, data} response contract (check reqStatus before data), the no-NULL rule (use 0 / '' / {} / []), and timestamps in seconds not milliseconds. Flag any handler that breaks the envelope or a consumer that trusts data without reqStatus."
+    "focus": "The interface contract with callers of public endpoints and exported functions: response and error shape, status and error semantics, nullability, units and formats (e.g. timestamps, money, IDs), pagination, and versioning or backward compatibility. Flag a handler that departs from the established shape, a breaking change shipped without a version or migration path, and a consumer that uses a result without checking whether the call succeeded. Apply the project conventions listed below when present; absent them, judge against the codebase's own prevailing pattern in the touched area, not against a preference."
   },
 
   "ui-styling": {
     "_core": false,
     "_when": "conditional; webapp/mobile",
-    "focus": "Custom --ccs-* CSS variables only (never Ionic vars or hex literals), and no function calls in Angular templates (pre-compute in component properties). Flag Ionic-var/hex usage and template-bound method calls."
+    "focus": "The UI system's contract: styling goes through the project's design tokens and shared components rather than literal colours, sizes, or one-off variants; templates and render paths obey the framework's rules (no expensive or side-effecting work in templates or render functions); and accessibility basics hold (labels, focus order, contrast, keyboard reachability). Apply the project conventions listed below when present; absent them, judge against the codebase's own prevailing pattern in the touched area, not against a preference."
   },
 
   "performance": {
     "_core": false,
     "_when": "conditional; code services",
-    "focus": "Hot-path and complexity regressions in the changed code: O(n^2) scans in loops, allocation in loops, unbounded recursion, deep transitive loop nesting. When CMM is available, query its complexity metrics (transitive_loop_depth, linear_scan_in_loop, alloc_in_loop) for the touched functions rather than eyeballing."
+    "focus": "The cost contract: the change must not make a hot path or a scaling dimension materially worse. Look for O(n^2) scans in loops, allocation in loops, unbounded recursion, deep transitive loop nesting, N+1 queries, and unbounded reads or fan-out. When CMM is available, query its complexity metrics (transitive_loop_depth, linear_scan_in_loop, alloc_in_loop) for the touched functions rather than eyeballing."
   }
 }

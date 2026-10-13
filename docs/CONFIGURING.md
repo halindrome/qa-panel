@@ -92,12 +92,16 @@ no base-branch setting: every round uses the MR/PR's own target branch.
 that target, so preflight rejects it rather than degrading quietly. Known tags — these
 are **tags, not lens names**; each enables the lens beside it:
 
-| tag | enables lens |
-|---|---|
-| `schema` | `schema-propagation` |
-| `api` | `api-envelope` |
-| `ui` | `ui-styling` |
-| `perf` | `performance` |
+| tag | enables lens | the contract it checks |
+|---|---|---|
+| `schema` | `schema-propagation` | schema changes reach the provisioning schema file; no code depends on schema it lacks |
+| `api` | `api-envelope` | response/error shape, nullability, units, compatibility of public interfaces |
+| `ui` | `ui-styling` | design tokens and shared components, framework render rules, accessibility basics |
+| `perf` | `performance` | no material regression on hot paths or scaling dimensions |
+
+The three core lenses — `contract-security`, `regression-edges`, `test-quality` — always
+run. Every lens's shipped text is generic; to teach a lens your project's own rules, see
+[`lenses`](#lenses--project-conventions-per-lens).
 
 Writing the lens name (`ui-styling`) instead of the tag (`ui`) is the common mistake: it
 is not fatal, but the tag is inert and preflight warns `unknown_lens_tags`. The
@@ -168,13 +172,48 @@ an MR permanently unapprovable — an endless cycle becomes a stuck one. It requ
 human to defer each remaining finding explicitly, enumerated in a posted note. See
 [CASE-STUDIES.md](CASE-STUDIES.md) §stop-rules-need-exits.
 
-## `review` — panel shape
+## `lenses` — project conventions per lens
+
+Each shipped lens states a generic contract (see the table under `targets`). Two fields
+let a user or project config specialise one, keyed by **lens name**:
 
 ```json
-{ "review": { "max_lenses": 6, "proportionality_strict_from_round": 3 } }
+{
+  "lenses": {
+    "api-envelope": {
+      "extra": "Every response is {ok, error, data}; callers check ok before reading data. Timestamps are integer seconds since the epoch."
+    },
+    "ui-styling": {
+      "extra": "Colours and spacing come from the --app-* CSS custom properties only; never hex literals."
+    }
+  }
+}
 ```
 
-`max_lenses` is capped at 6, the measured concurrency ceiling for agent grandchildren,
+- **`extra` is appended** to the lens prompt under `### Project conventions`, after the
+  generic focus. This is what you normally want: the lens keeps its general checks and
+  also enforces yours. The `api-envelope` and `ui-styling` lenses judge against these
+  conventions when present, and against the codebase's own prevailing pattern when not.
+- **`focus` replaces** the shipped text entirely. Use it only when the generic contract
+  is wrong for your project, not merely incomplete, because a replacement no longer
+  benefits from improvements to the shipped text.
+- **The last layer wins per field.** A project `extra` replaces a user-layer `extra`
+  for the same lens; they are not concatenated. Entries for different lenses in
+  different layers all survive.
+- It is an object rather than an array because the layers merge with jq `*`, which
+  merges objects key by key but replaces an array whole.
+- A non-object entry, or a non-string `focus`/`extra`, stops preflight (exit 2): a
+  silently dropped convention is a lens that stops enforcing it while reporting normally.
+  An unknown lens name warns `unknown_lens_config_keys`. Projects extend the shipped
+  lenses; they cannot add new ones.
+
+Preflight writes the resolved result to `$QA_SCRATCH/resolved-catalog.json`, which is the only
+catalog the lenses read. Inspect it to see exactly what each lens was told.
+
+## `review` — panel shape
+
+The panel is the three core lenses plus whatever the target's `lens_tags` and the schema
+signal enable, capped at 6, the measured concurrency ceiling for agent grandchildren,
 which keeps the panel a single wave. To narrow a review, narrow a target's `lens_tags` —
 **never** manage cost by downgrading the model. A cheaper reviewer is a weaker reviewer,
 which defeats the point of the cycle.
