@@ -95,6 +95,7 @@ mkfixture() {
 
   cp "$PREFLIGHT_SRC" "$plugin/lib/preflight.sh"
   cp "$DEFAULTS_SRC"  "$plugin/config/defaults.json"
+  cp "$REPO_SRC/config/lens-catalog.json" "$plugin/config/"
   # The REAL forge seam, not a stub: preflight reaches the forge only through
   # these, so stubbing them would re-implement production logic in the test —
   # the exact failure documented in this file's header. The `glab` binary on
@@ -2545,6 +2546,85 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo "[lenses config — project extends or replaces the shipped generic focus]"
+# Drives the REAL preflight and reads the resolved catalog it writes, which is
+# the only catalog run-panel.sh reads.
+rcat() { jq -r '.qa_scratch' <<<"$1" | xargs -I{} cat {}/resolved-catalog.json; }
+SHIPPED_API_FOCUS=$(jq -r '."api-envelope".focus' "$CATALOG_JSON")
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "PROJ-EXTRA"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "project extra lands in the resolved catalog" "$(jq -r '."api-envelope".extra' <<<"$c")" "PROJ-EXTRA"
+eq "  shipped focus is kept alongside it"        "$(jq -r '."api-envelope".focus' <<<"$c")" "$SHIPPED_API_FOCUS"
+eq "  brief names the resolved catalog" \
+   "$(sed -n 's/^lens_catalog_path=//p' "$(jq -r '.manager_brief_path' <<<"$out")")" "$(jq -r '.qa_scratch' <<<"$out")/resolved-catalog.json"
+rm -rf "$r"
+r=$(mkfixture "feature/x" "main" '.lenses."ui-styling".focus = "PROJ-FOCUS"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "project focus replaces the shipped focus" "$(jq -r '."ui-styling".focus' <<<"$c")" "PROJ-FOCUS"
+eq "  other lenses keep theirs" "$(jq -r '."api-envelope".focus' <<<"$c")" "$SHIPPED_API_FOCUS"
+rm -rf "$r"
+# User layer sets extra, project layer sets it too: last layer wins, no concat.
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "PROJECT"'); commit_lines "$r/repo" 5 f.txt
+mkdir -p "$r/home/.config/qa-panel"
+printf '{"lenses":{"api-envelope":{"extra":"USER"},"performance":{"extra":"USER-PERF"}}}\n' \
+  > "$r/home/.config/qa-panel/config.json"
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "project extra overrides user extra (last layer wins)" "$(jq -r '."api-envelope".extra' <<<"$c")" "PROJECT"
+eq "  a user-only entry survives the project layer"        "$(jq -r '.performance.extra' <<<"$c")" "USER-PERF"
+rm -rf "$r"
+# Wrong types are fatal: a dropped extra is a lens quietly not enforcing the rules.
+for _f in '.lenses = ["api-envelope"]' '.lenses."api-envelope".extra = 42' \
+          '.lenses."api-envelope" = "text"' '.lenses."ui-styling".focus = ["a"]' \
+          '.lenses."ui-styling".focus = null' '.lenses."ui-styling".focus = ""'; do
+  r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
+  run_preflight "$r" 73 mono >/dev/null; eq "lenses config '$_f' -> exit 2" "$?" "2"
+  rm -rf "$r"
+done
+# An empty or null `extra` is how a later layer unsets an inherited one: allowed.
+for _f in '.lenses."api-envelope".extra = null' '.lenses."api-envelope".extra = ""'; do
+  r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
+  run_preflight "$r" 73 mono >/dev/null; eq "lenses config '$_f' -> runs (unsets extra)" "$?" "0"
+  rm -rf "$r"
+done
+# An unknown lens name is warned (projects cannot add lenses) and never resolved.
+r=$(mkfixture "feature/x" "main" '.lenses."api-contract".extra = "x"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); rc=$?; c=$(rcat "$out")
+eq "unknown lens config key -> still runs" "$rc" "0"
+eq "  warned as unknown_lens_config_keys" \
+   "$(jq -r '[.warnings[]|select(startswith("unknown_lens_config_keys:lenses.api-contract"))]|length' <<<"$out")" "1"
+eq "  and absent from the resolved catalog" "$(jq -r 'has("api-contract")' <<<"$c")" "false"
+rm -rf "$r"
+# targets.<t>.lenses scopes conventions to one sub-project of a monorepo: it beats
+# the top-level layer for that target, and no other target sees it.
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "TOP"
+  | .targets.mono.lenses."api-envelope".extra = "MONO"
+  | .targets.other = (.targets.mono | del(.lenses))
+  | .targets.other.lenses."ui-styling".extra = "OTHER-ONLY"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "target lenses override top-level lenses for that target" "$(jq -r '."api-envelope".extra' <<<"$c")" "MONO"
+eq "  another target's lenses do not leak in" "$(jq -r '."ui-styling".extra // "none"' <<<"$c")" "none"
+rm -rf "$r"
+r=$(mkfixture "feature/x" "main" '.lenses."api-envelope".extra = "TOP"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono); c=$(rcat "$out")
+eq "  a target without lenses inherits the top-level ones" "$(jq -r '."api-envelope".extra' <<<"$c")" "TOP"
+rm -rf "$r"
+for _f in '.targets.mono.lenses = ["api-envelope"]' '.targets.mono.lenses."api-envelope".extra = 42'; do
+  r=$(mkfixture "feature/x" "main" "$_f"); commit_lines "$r/repo" 5 f.txt
+  run_preflight "$r" 73 mono >/dev/null; eq "target lenses config '$_f' -> exit 2" "$?" "2"
+  rm -rf "$r"
+done
+r=$(mkfixture "feature/x" "main" '.targets.mono.lenses."api-contract".extra = "x"'); commit_lines "$r/repo" 5 f.txt
+out=$(run_preflight "$r" 73 mono)
+eq "unknown target lens key -> warned with its full path" \
+   "$(jq -r '[.warnings[]|select(contains("targets.mono.lenses.api-contract"))]|length' <<<"$out")" "1"
+rm -rf "$r"
+# The shipped text must stay generic. These are one organisation's conventions;
+# they belong in that project's `lenses.<name>.extra`, never in the catalog.
+eq "shipped catalog carries no project-specific conventions" \
+   "$(jq -r '[to_entries[] | select(.key | startswith("$") | not) | .value | (.focus, .extra // "")
+              | select(test("reqStatus|--ccs-|Ionic|Angular"))] | length' "$CATALOG_JSON")" "0"
+
+# ---------------------------------------------------------------------------
 echo "[status-line format agrees across BOTH review paths]"
 # The manager owns the round on the default path; the sequential fallback owns it for
 # a tiny diff or when Agent nesting is unavailable. Both now write the same status
@@ -2799,7 +2879,11 @@ mkpanel() {   # -> echoes a root dir with plugin/, repo/, scratch/, bin/
   cp "$RUNPANEL_SRC" "$plugin/lib/run-panel.sh"
   cp "$REPO_SRC/lib/lens-landed.sh" "$REPO_SRC/lib/set-phase.sh" \
      "$REPO_SRC/lib/lens-tool-log.sh" "$REPO_SRC/lib/lens-tools-summary.sh" "$plugin/lib/"
-  cp "$REPO_SRC/config/lens-catalog.json" "$REPO_SRC/config/lens-schema.json" "$plugin/config/"
+  # The shipped catalog goes into the SCRATCH dir, as preflight's resolved copy
+  # (with no `lenses` config the resolution is the identity), and deliberately NOT
+  # into plugin/config: the driver must read only the resolved file.
+  cp "$REPO_SRC/config/lens-schema.json" "$plugin/config/"
+  cp "$REPO_SRC/config/lens-catalog.json" "$S/resolved-catalog.json"
 
   git init -q -b main "$repo"
   git -C "$repo" config user.email t@t.t; git -C "$repo" config user.name t
@@ -2825,6 +2909,7 @@ mkpanel() {   # -> echoes a root dir with plugin/, repo/, scratch/, bin/
     printf 'feature_branch=feature/x\ntarget_branch=main\n'
     printf 'diff_range=origin/main..HEAD\n'
     printf 'lenses=["contract-security","regression-edges","test-quality"]\n'
+    printf 'lens_catalog_path=%s/resolved-catalog.json\n' "$S"
     printf 'review_model=opus\n'
     printf 'lens_models={}\n'
     printf 'allowed_models=["opus","fable"]\n'
@@ -3336,6 +3421,40 @@ eq "unknown lens -> recorded, not invented" \
 eq "  no prompt was composed for it" \
    "$([ -f "$p/scratch/prompt-no-such-lens.txt" ] && echo present || echo absent)" "absent"
 rm -rf "$p"
+
+# --- project conventions (`extra`) reach the prompt, after the generic focus ----
+p=$(mkpanel)
+jq '."regression-edges".extra = "PROJECT-RULE-SENTINEL"' "$p/scratch/resolved-catalog.json" \
+  > "$p/scratch/c.tmp" && mv "$p/scratch/c.tmp" "$p/scratch/resolved-catalog.json"
+run_panel "$p" >/dev/null
+_pr="$p/scratch/prompt-regression-edges.txt"
+eq "extra -> a titled Project conventions section" "$(grep -c '^### Project conventions' "$_pr")" "1"
+eq "  carrying the configured text"                "$(grep -c 'PROJECT-RULE-SENTINEL' "$_pr")" "1"
+eq "  placed after the focus, before the change" \
+   "$(awk '/^## Your focus/{f=NR} /^### Project conventions/{x=NR} /^## The change under review/{c=NR}
+           END{print (f<x && x<c) ? "ordered" : "f=" f " x=" x " c=" c}' "$_pr")" "ordered"
+eq "  a lens with no extra gets no such section" \
+   "$(grep -c '^### Project conventions' "$p/scratch/prompt-test-quality.txt")" "0"
+rm -rf "$p"
+
+# --- no resolved catalog is fatal: never a silent fallback to the shipped one ---
+# A fallback would drop every project convention while the panel reported normally.
+# The shipped catalog is planted exactly where a fallback would look, so a driver
+# that fell back would compose prompts and these assertions would fail.
+for _case in absent-key missing-file; do
+  p=$(mkpanel)
+  cp "$REPO_SRC/config/lens-catalog.json" "$p/plugin/config/"
+  case "$_case" in
+    absent-key)   sed -i.bak '/^lens_catalog_path=/d' "$p/scratch/manager-brief.txt" ;;
+    missing-file) rm -f "$p/scratch/resolved-catalog.json" ;;
+  esac
+  run_panel "$p" >/dev/null; rc=$?
+  eq "resolved catalog $_case -> die_internal (exit 5)" "$rc" "5"
+  eq "  the error names the missing resolved catalog" \
+     "$(grep -c 'no resolved lens catalog' "$p/panel.err")" "1"
+  eq "  no prompt composed" "$(ls "$p/scratch"/prompt-*.txt 2>/dev/null | wc -l | tr -d ' ')" "0"
+  rm -rf "$p"
+done
 
 # --- the catalog must cover every name preflight can emit --------------------
 # These two lists drifting apart is invisible until a real round selects the

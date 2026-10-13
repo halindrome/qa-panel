@@ -241,6 +241,38 @@ UNKNOWN_LENS_MODEL_KEYS=$(jq -r --arg re "$KNOWN_LENS_NAMES_RE" \
   '[.review.lens_models // {} | keys[] | select(test($re) | not)] | join(" ")' "$BB" 2>/dev/null || echo "")
 LENS_MODELS_JSON=$(jq -c '.review.lens_models // {}' "$BB")
 
+# `lenses.<name>.focus` REPLACES a lens's shipped focus; `lenses.<name>.extra` is
+# APPENDED to it as project conventions. Keyed by lens name in an object, never an
+# array: the layers merge with jq `*`, which merges objects per key but replaces
+# arrays whole, so a project array would silently erase every user-layer entry.
+# A wrong type is fatal rather than skipped -- a dropped `extra` is a lens that
+# quietly stops enforcing the project's rules while reporting as a full panel member.
+#
+# `targets.<t>.lenses` has the same shape and overlays the top-level `lenses` for
+# that target only, so a monorepo can scope one sub-project's conventions to it.
+# Only the selected target is checked, as with lens_tags.
+UNKNOWN_LENS_CONFIG_KEYS=""
+for _lp in lenses "targets.$TARGET.lenses"; do
+  _sel='.lenses'; [ "$_lp" = lenses ] || _sel='.targets[$t].lenses'
+  _type=$(jq -r --arg t "$TARGET" "$_sel | type" "$BB" 2>/dev/null || echo "null")
+  case "$_type" in
+    object|null) ;;
+    *) die_usage "$_lp must be an object keyed by lens name (found: $_type), e.g. {\"api-envelope\":{\"extra\":\"...\"}}." ;;
+  esac
+  # A present `focus` must be a NON-EMPTY string: null or "" would overwrite the
+  # shipped focus with nothing and drop the lens from the panel. An `extra` of null
+  # or "" is allowed -- that is how a later layer unsets an inherited one.
+  _bad=$(jq -r --arg t "$TARGET" "[$_sel // {} | to_entries[]
+      | select((.value | type) != \"object\"
+               or (.value | has(\"focus\") and ((.focus | type) != \"string\" or .focus == \"\"))
+               or (.value.extra | . != null and type != \"string\"))
+      | .key] | join(\" \")" "$BB" 2>/dev/null || echo "")
+  [ -z "$_bad" ] || die_usage "$_lp entries must be objects whose focus is a non-empty string and extra a string; bad: $_bad"
+  _unk=$(jq -r --arg t "$TARGET" --arg re "$KNOWN_LENS_NAMES_RE" --arg lp "$_lp" \
+    "[$_sel // {} | keys[] | select(test(\$re) | not) | \"\(\$lp).\(.)\"] | join(\" \")" "$BB" 2>/dev/null || echo "")
+  [ -z "$_unk" ] || UNKNOWN_LENS_CONFIG_KEYS="${UNKNOWN_LENS_CONFIG_KEYS:+$UNKNOWN_LENS_CONFIG_KEYS }$_unk"
+done
+
 # The floor is an enumerated allow-list, never a strength ranking: the plugin does
 # not order models, the operator names the acceptable ones. An entry admits any id
 # containing it (case-insensitive), so "opus" covers "claude-opus-5" and
@@ -605,6 +637,10 @@ fi
 if [ -n "${UNKNOWN_LENS_MODEL_KEYS:-}" ]; then
   _valid_lenses=${KNOWN_LENS_NAMES_RE#'\A('}; _valid_lenses=${_valid_lenses%')\z'}
   WARNINGS+=("unknown_lens_model_keys:${UNKNOWN_LENS_MODEL_KEYS} (valid lens names: ${_valid_lenses//|/ } — the lens name, not the lens_tag)")
+fi
+if [ -n "${UNKNOWN_LENS_CONFIG_KEYS:-}" ]; then
+  _valid_lenses=${KNOWN_LENS_NAMES_RE#'\A('}; _valid_lenses=${_valid_lenses%')\z'}
+  WARNINGS+=("unknown_lens_config_keys:${UNKNOWN_LENS_CONFIG_KEYS} (valid lens names: ${_valid_lenses//|/ } — projects cannot add lenses, only extend the shipped ones)")
 fi
 
 # The MR's source branch is what we merge INTO and push. Refuse outright if that
@@ -1971,6 +2007,20 @@ done
 # JSON array of the selected lens names (order = spawn order = core-first).
 LENSES_JSON=$(printf '%s\n' "${LENSES[@]}" | jq -R . | jq -s .)
 
+# The catalog the lenses actually read: shipped generic focus text with the
+# merged config's `lenses` overlaid, then this target's `targets.<t>.lenses`.
+# run-panel.sh reads ONLY this file and has no fallback to the shipped one,
+# because a fallback would drop a project's conventions while the panel reported
+# normally. Unknown names were warned above and are filtered out here, so they
+# cannot reach a prompt. NOT named lens-*.json: round-return.sh and
+# lens-landed.sh count that glob as landed lenses.
+LENS_CATALOG="$QA_SCRATCH/resolved-catalog.json"
+jq -s --arg re "$KNOWN_LENS_NAMES_RE" --arg t "$TARGET" \
+  'def known: with_entries(select(.key | test($re)));
+   .[0] * (.[1].lenses // {} | known) * (.[1].targets[$t].lenses // {} | known)' \
+  "$PLUGIN_ROOT/config/lens-catalog.json" "$BB" > "$LENS_CATALOG" 2>/dev/null \
+  || die_internal "could not resolve the lens catalog into $LENS_CATALOG"
+
 # ---------------------------------------------------------------------------
 # Round progress -> $QA_SCRATCH/status
 # ---------------------------------------------------------------------------
@@ -2044,6 +2094,7 @@ MANAGER_BRIEF="$QA_SCRATCH/manager-brief.txt"
   printf 'target_branch=%s\n'          "$TARGET_BRANCH"
   printf 'diff_range=%s\n'             "$REMOTE/$TARGET_BRANCH..HEAD"
   printf 'lenses=%s\n'                 "$(printf '%s' "$LENSES_JSON" | jq -c .)"
+  printf 'lens_catalog_path=%s\n'      "$LENS_CATALOG"
   # The lens panel's models and the floor they were validated against -- see
   # config/defaults.json `review`. run-panel.sh re-checks both, against the
   # model each lens actually ran as.

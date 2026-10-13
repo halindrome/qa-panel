@@ -142,6 +142,15 @@ mandate this file is NEVER empty, and preflight escalates its contents at
 round >= 3. Paste verbatim; do not summarize, reword, or soften it. It is the
 counterweight to a reviewer objective that otherwise optimizes recall alone.>
 
+## Project conventions
+
+<for each lens in preflight.json `lenses`, paste the `extra` text from
+$QA_SCRATCH/resolved-catalog.json (`jq -r --argjson l "$(jq -c .lenses "$QA_SCRATCH/preflight.json")"
+'to_entries[] | select(.key as $k | $l | index($k)) | select(.value.extra) |
+"### \(.key)\n\n\(.value.extra)\n"'`), verbatim. Omit this section when that prints
+nothing. The sequential reviewer stands in for the whole panel, so a project's
+conventions must reach it too or a tiny diff is reviewed without them.>
+
 ## Contract
 
 <paste the entire contents of $QA_SCRATCH/contract.md here — the contract
@@ -212,8 +221,8 @@ Emit a dedicated `## Schema Change` section in your report:
    and any existing comments via `forge_notes "$PROJECT" <MR_NUMBER>`. Do not call `glab`/`gh`
    directly — the seam dispatches on the remote and works for both forges.
 5. Act as devil's advocate: for each change ask — what happens when input is
-   empty/null/huge? What if a network call fails mid-flight? What if the user
-   navigates away? Are downstream callers of modified functions still compatible?
+   empty/null/huge? What if a network call fails mid-flight? What if the caller
+   cancels or abandons the operation? Are downstream callers of modified functions still compatible?
 6. Check test coverage: does any new service or component lack a spec file?
 
 ## Hard constraints

@@ -112,9 +112,13 @@ printf '%s' "$LENSES_JSON" | jq -e 'type == "array" and length > 0' >/dev/null 2
 LENSES=$(printf '%s' "$LENSES_JSON" | jq -r '.[]')
 TOTAL=$(printf '%s' "$LENSES_JSON" | jq -r 'length')
 
-CATALOG="$PLUGIN/config/lens-catalog.json"
+# The RESOLVED catalog preflight wrote (shipped focus + config `lenses`), never the
+# shipped file: falling back to it would drop a project's conventions while the
+# panel reported normally.
+CATALOG=$(brief lens_catalog_path)
 SCHEMA_FILE="$PLUGIN/config/lens-schema.json"
-[ -f "$CATALOG" ]     || die_internal "missing $CATALOG"
+[ -n "$CATALOG" ] && [ -f "$CATALOG" ] \
+  || die_internal "brief names no resolved lens catalog (lens_catalog_path='$CATALOG'); re-run preflight"
 [ -f "$SCHEMA_FILE" ] || die_internal "missing $SCHEMA_FILE"
 
 # Strip the rationale comments before handing the schema to the CLI: the schema is
@@ -215,8 +219,9 @@ bash "$HERE/set-phase.sh" "$S" lenses >/dev/null \
 # adoption and a detached preamble gets ignored.
 # ---------------------------------------------------------------------------
 compose() {   # $1 = lens name -> writes $S/prompt-<lens>.txt
-  local lens="$1" focus
+  local lens="$1" focus extra
   focus=$(jq -r --arg l "$lens" '.[$l].focus // empty' "$CATALOG")
+  extra=$(jq -r --arg l "$lens" '.[$l].extra // empty' "$CATALOG")
   # An unknown lens name is fatal, never an invented mandate: a lens with a
   # made-up focus reviews nothing in particular while reporting as a full panel
   # member.
@@ -243,6 +248,9 @@ compose() {   # $1 = lens name -> writes $S/prompt-<lens>.txt
     fi
 
     printf '## Your focus\n\n%s\n\n' "$focus"
+    if [ -n "$extra" ]; then
+      printf '### Project conventions\n\n%s\n\n' "$extra"
+    fi
 
     printf '## The change under review\n\n'
     printf -- '- Repository: `%s`\n' "$TARGET_ABS"
@@ -311,7 +319,7 @@ fail_lens() {  # $1 lens, $2 state, $3 rc, $4 detail
 # ---------------------------------------------------------------------------
 for lens in $LENSES; do
   if ! compose "$lens"; then
-    fail_lens "$lens" "unknown_lens" 0 "no entry in config/lens-catalog.json"
+    fail_lens "$lens" "unknown_lens" 0 "no focus for this lens in the resolved catalog $CATALOG"
     continue
   fi
   model=$(resolve_model "$lens")

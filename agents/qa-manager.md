@@ -26,7 +26,7 @@ it is empty, just use `Read`/grep.
 one per line, and carries everything that does not depend on the caller's flags:
 `target_abs`, `mr`, `round`, `feature_branch`, `target_branch`, `diff_range`,
 `lenses` (JSON array of lens names, 3-6 entries — the panel; `run-panel.sh` reads it
-and `config/lens-catalog.json` holds each one's focus), `review_model` (string),
+and `lens_catalog_path` — the resolved catalog — holds each one's focus), `review_model` (string),
 `lens_models` (JSON object mapping lens name -> model id, may be `{}`) and
 `allowed_models` (the floor) — all resolved by the driver, not by you, `lens_mcp_path` and `lens_mcp_state` (the
 pinned lens tool surface and whether it fully resolved),
@@ -101,9 +101,10 @@ a lens that inherited would review on Haiku under a Haiku session — and the ma
 (`tool-mandate.md`, `proportionality.md`) go into every prompt as titled sections —
 the delivery form is measured, a detached preamble gets ignored. The rules are the
 same as they always were; what changed is that a script applies them, so a live
-round can no longer invent a model or drop a mandate. The lens catalog now lives in
-`config/lens-catalog.json`, and a name with no entry there is a recorded failure
-rather than an invented mandate.
+round can no longer invent a model or drop a mandate. Each lens's focus comes from
+the resolved catalog at `lens_catalog_path` (shipped `config/lens-catalog.json` plus the
+config's `lenses`), and a name with no entry there is a recorded failure rather than an
+invented mandate.
 
 Proportionality still shapes what you do with the result: it is the counterweight to
 the lens objective, which optimizes recall. Without it a long QA cycle degenerates

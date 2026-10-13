@@ -62,6 +62,7 @@ complete *before* the first push rather than fixed in a later commit.
 | Skill named **`qa-cycle`**, not `qa-round` | One invocation drives the whole cycle: Step 3D loops into round N+1, Step 3E approves, Step 4 prints "QA Cycle Complete". `round` is the unit *inside* the skill, not the skill. Renamed together with the project config path (`.claude/skills/qa-cycle/config.json`), the scratch prefix (`/tmp/qa-cycle-*`) and the test seam (`QA_CYCLE_SCRATCH_ROOT`). |
 | **No aliases** — `/qa-cycle` only | The forge is detected from the git remote, so `/mr-qa` vs `/pr-qa` encodes nothing the plugin does not already know. `/pr-qa` would also collide with the older sibling skill still installed at `~/.config/claude-code/skills/pr-qa/`. Two extra always-on skill descriptions bought nothing. |
 | **Schema MRs need a human approval, and the MR author counts** (decided 2026-09-28) | Owner's policy: a human must sign off, not a second person. The gate excludes only the QA agent. Counting the author is safe only because `forge_approve` refuses an empty token, so the tool cannot approve under the author's identity (§self-approval-fallback). No config switch for a two-person rule; add one when an adopter needs it. |
+| **Shipped lens text is generic; projects extend it with `lenses.<name>.extra` (append) or `.focus` (replace)** (decided 2026-10-13) | The catalog carried the origin org's API envelope and UI-framework rules as if they were lenses, which is wrong for every other adopter. Append is the default because it is what every surveyed reviewer does (PR-Agent `extra_instructions`, CodeRabbit `path_instructions`, Copilot instructions files, claude-code-security-review); replace exists, as a separate field, for when the generic contract is wrong rather than incomplete. Keyed by lens name in an object because jq `*` replaces arrays. Last layer wins per field; no cross-layer concatenation. `targets.<t>.lenses` overlays the top-level `lenses` for one target, because a monorepo's conventions are per sub-project (a REST envelope rule is wrong for an RPC server tagged `api`); targets already map sub-projects to paths, so no per-directory config cascade. Projects cannot add lenses yet (see What is left). |
 
 ---
 
@@ -497,6 +498,21 @@ zero `printf … > …/status`. Until then the claim is "scripts heal it", not
 "the manager stopped".
 
 ### Smaller, independent items
+
+- **Lenses phase 2: project-defined lenses and path triggers.** `lenses.<name>.extra` /
+  `.focus` extend the seven shipped lenses (2026-10-13). Still open:
+  - Projects registering NEW lenses. This needs the tag and name vocabularies
+    (`KNOWN_LENS_TAGS_RE`, `KNOWN_LENS_NAMES_RE`, the selection block, the output enum
+    check in `lib/preflight.sh`) derived from the resolved catalog instead of literals,
+    and the tests that extract them rewritten.
+  - `paths: {include, exclude}` triggers per lens, beside `lens_tags`. Path checks only
+    (invariant 7).
+  - `enabled: false` per lens. If added, a disabled lens must report
+    `disabled-by-config` rather than vanish (invariant 2), and core lenses must not be
+    disableable from config the MR itself can edit.
+  - `agents/qa-reviewer.md` step 8 gives EVERY lens the code-only schema mandate,
+    whether or not `schema-propagation` is on the panel. Decide whether that belongs
+    only to the schema lens.
 
 - **Flag defaults in config; `.branchconfig.yaml` dropped (2026-10-02).** A `flags`
   block (`double`, `triple`, `reviewer`, `non_interactive`) defaults those flags;

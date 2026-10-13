@@ -1,12 +1,17 @@
 {
-  "_comment": "Monorepo whose components are reviewed as independent MRs. `scope` is the commit-message token used for fix commits: fix(<scope>): address QA round N.",
+  "_comment": "Monorepo whose components are reviewed as independent MRs. `scope` is the commit-message token used for fix commits: fix(<scope>): address QA round N. A target's `lenses` adds conventions for that sub-project only (keys are LENS NAMES, not lens_tags; `focus` instead of `extra` replaces the shipped text).",
   "targets": {
     "api": {
       "path": "apps/api",
       "remote": "origin",
       "scope": "api",
       "security_stage": true,
-      "lens_tags": ["schema", "api"]
+      "lens_tags": ["schema", "api"],
+      "lenses": {
+        "api-envelope": {
+          "extra": "Every response is {ok, error, data}; callers check ok before reading data. Timestamps are integer seconds since the epoch."
+        }
+      }
     },
     "webapp": {
       "path": "apps/webapp",
