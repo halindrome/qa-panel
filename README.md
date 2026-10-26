@@ -260,6 +260,36 @@ For a monorepo whose parts are reviewed separately, see
 [examples/monorepo-submodules.json](examples/monorepo-submodules.json). Every setting,
 and what happens when one is wrong, is in [docs/CONFIGURING.md](docs/CONFIGURING.md).
 
+## Companion plugin: qa-remaining
+
+`/qa-cycle` reviews one MR at a time. [qa-remaining](plugins/qa-remaining/README.md) keeps
+track of the whole set: a side pane listing every ticket still open for the branch your work
+merges into (an epic, a release branch, trunk), what is holding each one, and the order you
+want them worked in. It is a separate install. Neither plugin needs the other.
+
+```bash
+claude plugin install qa-remaining@halindrome   # after the marketplace add above
+```
+
+**Using it:**
+
+1. In a clone of your repo, ask Claude to start the list, for example "start a remaining list
+   for epic PROJ-100 from JIRA". Claude writes `.claude/remaining/<target>.json`.
+2. Run `/qa-remaining`. It opens the pane and says which merge target it picked and which file it
+   reads. The pane opens by itself in later sessions once the file exists.
+3. Keep working. Claude is told where the list is in every session, so it updates a ticket's
+   group and note as the ticket moves. A natural point is after a `/qa-cycle` round ("move
+   PROJ-113 to Ready for QA").
+4. Set the priority in the pane. Press `≡` beside a ticket, then `›` beside the ticket it should go
+   in front of, or a group header to put it at the end of that group. Press `↕` again to cancel.
+   It also works by mouse click or by Tab and Enter.
+
+**The merge target** is `git config qa-remaining.target` if you set one. Otherwise it comes from a
+`.branchconfig.yaml` at the repo root: a feature branch uses its `base_branch`, and an epic or release
+branch is its own target. Without either, it is the current branch. In a monorepo,
+submodules share the superproject's list. The file format, and how to commit or gitignore the
+lists, are in [the plugin's README](plugins/qa-remaining/README.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
