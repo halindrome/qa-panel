@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 import { fileName, move, pickTarget, TODO } from './register'
 import type { Data } from './register'
@@ -39,8 +40,8 @@ test('moving rows', async () => {
   expect(keys(DATA, 0)).toEqual(['P-1', 'P-2', 'P-3'])
 })
 
-test('pick then place writes the new order', async ($, on) => {
-  let file = JSON.stringify(DATA)
+/** Mounts the pane over a repo at /repo on `main`, its list held in `file.text`. */
+async function pane(...[$, on, file]: [...Parameters<TestBody>, { text: string }]) {
   on('process.run', (_, e) => {
     const args = e.argv.slice(1).join(' ')
     const stdout = args.startsWith('rev-parse --show') ? '/repo\n' : args.startsWith('rev-parse') ? 'main\n' : ''
@@ -48,23 +49,50 @@ test('pick then place writes the new order', async ($, on) => {
   })
   on('fs.exists', (_, e) => ({ value: e.path === '/repo/.claude/remaining/main.json' }))
   on('fs.read', (_, e) => {
-    if (e.path.endsWith('main.json')) return { value: file }
+    if (e.path.endsWith('main.json')) return { value: file.text }
     throw new Error('missing')
   })
   on('fs.write', (_, e) => {
-    file = e.text
+    file.text = e.text
     return { value: undefined }
   })
-
-  const ui = await $.ui.mount({
+  return $.ui.mount({
     plugin: 'qa-remaining',
     component: 'Pane',
     requestId: 'qa-remaining',
     surface: 'terminal',
     props: { title: 'Remaining', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
   })
+}
+const shows = async (ui: { drawn: () => Promise<unknown> }, text: string) => JSON.stringify(await ui.drawn()).includes(text)
+
+test('pick then place writes the new order', async ($, on) => {
+  const file = { text: JSON.stringify(DATA) }
+  const ui = await pane($, on, file)
   await ui.press({ key: 'Fix/P-3' })
   await ui.press({ key: 'end/Ready' })
-  expect(keys(JSON.parse(file) as Data, 1)).toEqual(['P-9', 'P-3'])
+  expect(keys(JSON.parse(file.text) as Data, 1)).toEqual(['P-9', 'P-3'])
+  await ui.unmount()
+})
+
+test('a list of the wrong shape is named, not thrown', async ($, on) => {
+  const file = { text: 'null' }
+  const ui = await pane($, on, file)
+  for (const bad of ['null', '[]', '{"groups":{}}', '{"groups":[{"name":"Fix"}]}', '{"groups":[{"name":"Fix","items":[{"why":"no key"}]}]}', '{"todo":[1]}']) {
+    file.text = bad
+    await ui.redraw()
+    expect(await shows(ui, "Can't read")).toBe(true)
+  }
+  await ui.unmount()
+})
+
+test('a press on a list that went bad shows the error', async ($, on) => {
+  const file = { text: JSON.stringify(DATA) }
+  const ui = await pane($, on, file)
+  await ui.press({ key: 'Fix/P-3' })
+  file.text = '{"groups":{}}'
+  await ui.press({ key: 'end/Ready' })
+  expect(file.text).toBe('{"groups":{}}')
+  expect(await shows(ui, "Can't read")).toBe(true)
   await ui.unmount()
 })

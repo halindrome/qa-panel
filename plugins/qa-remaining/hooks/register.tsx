@@ -81,6 +81,21 @@ const SCHEMA =
   '{ "title"?, "updated": "YYYY-MM-DD", "ticketUrl"?: "<base URL a key is appended to>", "search"?: { "label", "href" }, ' +
   '"groups": [{ "name", "items": [{ "key", "why", "href"? }] }], "todo"?: ["..."] }'
 
+/** Parses a list, throwing when it is not JSON of the shape the pane draws, so both fail the same readable way. */
+export function parse(text: string): Data {
+  const d = JSON.parse(text) as Data | null
+  const str = (x: unknown) => typeof x === 'string'
+  const item = (it: Item | null) => !!it && str(it.key) && (it.why === undefined || str(it.why))
+  const ok =
+    !!d &&
+    typeof d === 'object' &&
+    !Array.isArray(d) &&
+    (d.groups === undefined || (Array.isArray(d.groups) && d.groups.every(g => !!g && str(g.name) && Array.isArray(g.items) && g.items.every(item)))) &&
+    (d.todo === undefined || (Array.isArray(d.todo) && d.todo.every(str)))
+  if (!ok) throw new Error(`not the expected shape ${SCHEMA}`)
+  return d!
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'qa-remaining', description: 'Show the tickets still open for the branch you merge into' })
@@ -132,7 +147,7 @@ export const register: Register = on => {
       return <Text dimColor>No list for {at.target} yet. Ask Claude to start {at.rel}.</Text>
     let data: Data
     try {
-      data = JSON.parse(await $.fs.read(at.path)) as Data
+      data = parse(await $.fs.read(at.path))
     } catch (err) {
       return <Text color="red">Can't read {at.path}: {String(err)}</Text>
     }
@@ -146,7 +161,13 @@ export const register: Register = on => {
       })
       const f = from as Picked
       if (!f || f.key === spot.key) return
-      const fresh = JSON.parse(await $.fs.read(at.path)) as Data
+      let fresh: Data
+      try {
+        fresh = parse(await $.fs.read(at.path))
+      } catch {
+        // Redraw, so the pane names the bad file instead of the press failing silently.
+        return void (await update($, stamp, n => n + 1))
+      }
       const moved = move(fresh, f, spot)
       if (moved === fresh) return
       await $.fs.write(at.path, JSON.stringify(moved, null, 2) + '\n')
