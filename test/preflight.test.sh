@@ -341,6 +341,16 @@ note_scratch "$out"; eq "narrowed refspec, local ahead -> exit 0" "$rc" "0"
 eq "  the local commit reached the remote" \
    "$(git -C "$r/repo" ls-remote origin refs/heads/feature/x | awk '{print $1}')" "$(git -C "$r/repo" rev-parse HEAD)"
 rm -rf "$r"
+# (i) the MR head moves between the push and the final check: only the post-push
+# HEAD == MR-head assertion can see it, so this case reaches that block alone.
+r=$(mkfixture "feature/x" "main")
+echo ahead > "$r/repo/ahead.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm ahead
+printf '#!/bin/sh\ngit update-ref refs/heads/feature/x refs/heads/main\n' > "$r/remote.git/hooks/post-receive"
+chmod +x "$r/remote.git/hooks/post-receive"
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "MR head moved after the push -> exit 4" "$rc" "4"
+eq "  reason names the HEAD mismatch" "$(jq -r '.sync.reason|test("is not the MR head")' <<<"$out")" "true"
+rm -rf "$r"
 
 # ---------------------------------------------------------------------------
 echo "[exit 3 — deletions gate fires BEFORE the push, and suppresses it]"
