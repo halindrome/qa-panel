@@ -155,6 +155,8 @@ SH
   git -C "$repo" add -A >/dev/null; git -C "$repo" commit -qm base
   git -C "$repo" push -q origin "$tgt_branch"
   git -C "$repo" checkout -q -b "$src_branch"
+  # An MR's source branch exists on the remote; preflight refuses one that does not.
+  git -C "$repo" push -q origin "$src_branch" 2>/dev/null || true
 
   # The stub honours env vars so a case can steer identity, the MR title/desc
   # (contract extraction), and the approval list (approval seeding) without
@@ -289,6 +291,34 @@ git -C "$r/repo" remote set-url origin /nonexistent/nope.git
 out=$(run_preflight "$r" 73 mono); rc=$?
 note_scratch "$out"; eq "broken remote -> exit 4" "$rc" "4"
 eq "  reason mentions fetch" "$(jq -r '.sync.reason|test("fetch")' <<<"$out")" "true"
+rm -rf "$r"
+# (e) local branch BEHIND the MR head (a fix pushed from another worktree): sync
+# fast-forwards it, so the round reviews the MR head, not the stale local tip.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+mr_head=$(git -C "$r/repo" rev-parse HEAD)
+git -C "$r/repo" reset -q --hard HEAD~1
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "stale local branch -> exit 0" "$rc" "0"
+eq "  HEAD fast-forwarded to the MR head" "$(git -C "$r/repo" rev-parse HEAD)" "$mr_head"
+rm -rf "$r"
+# (f) local branch DIVERGED from the MR head: never guessed at.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+git -C "$r/repo" reset -q --hard HEAD~1
+echo other > "$r/repo/other.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm other
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "diverged local branch -> exit 4" "$rc" "4"
+eq "  reason names the fast-forward" "$(jq -r '.sync.reason|test("fast-forward")' <<<"$out")" "true"
+rm -rf "$r"
+# (g) source branch absent on the remote: HEAD cannot be matched to an MR head.
+r=$(mkfixture "feature/x" "main")
+git -C "$r/repo" push -q origin --delete feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "source branch missing on remote -> exit 4" "$rc" "4"
+eq "  reason names the missing branch" "$(jq -r '.sync.reason|test("not found")' <<<"$out")" "true"
 rm -rf "$r"
 
 # ---------------------------------------------------------------------------
@@ -1838,6 +1868,7 @@ mkdir -p "$r/repo/apps/api/db"; echo sub-base > "$r/repo/apps/api/base.txt"
 git -C "$r/repo/apps/api" add -A >/dev/null; git -C "$r/repo/apps/api" commit -qm base
 git -C "$r/repo/apps/api" push -q origin main
 git -C "$r/repo/apps/api" checkout -q -b feature/x
+git -C "$r/repo/apps/api" push -q origin feature/x
 printf -- '-- the schema\n' > "$r/repo/apps/api/db/template.sql"
 git -C "$r/repo/apps/api" add -A >/dev/null; git -C "$r/repo/apps/api" commit -qm "touch the schema"
 out=$(run_preflight "$r" 73 api)

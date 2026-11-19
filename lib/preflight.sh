@@ -704,6 +704,23 @@ if [ "$SYNC_FAILED" != "true" ]; then
   fi
 fi
 
+# Bring the local branch up to the MR head before merging the base. A fix pushed
+# from another worktree (or another clone) moves $REMOTE/$SOURCE_BRANCH ahead of
+# the local ref; merging the base into that stale local would review an old commit.
+# Fast-forward only: a local branch that has diverged from the MR is the operator's
+# to reconcile, never preflight's to guess at.
+if [ "$SYNC_FAILED" != "true" ]; then
+  if ! (cd "$TARGET_ABS" && git rev-parse -q --verify "refs/remotes/$REMOTE/$SOURCE_BRANCH" >/dev/null); then
+    SYNC_FAILED=true
+    SYNC_REASON="MR source branch '$SOURCE_BRANCH' not found on $REMOTE after fetch, so the checkout cannot be matched to the MR head."
+  else
+    ff_out=$(cd "$TARGET_ABS" && git merge --ff-only "$REMOTE/$SOURCE_BRANCH" 2>&1) || {
+      SYNC_FAILED=true
+      SYNC_REASON="local '$SOURCE_BRANCH' cannot fast-forward to $REMOTE/$SOURCE_BRANCH (diverged, or the tree is in the way). Reconcile by hand: $ff_out"
+    }
+  fi
+fi
+
 PRE_MERGE_HEAD=""
 if [ "$SYNC_FAILED" != "true" ]; then
   # Record the pre-merge tip so the deletion heuristic below can measure what the
@@ -799,6 +816,18 @@ if [ "$PUSH_ELIGIBLE" = "true" ] && [ "$SYNC_FAILED" != "true" ]; then
     SYNC_REASON="git push $REMOTE $SOURCE_BRANCH failed: $push_out"
   else
     SYNC_PUSHED=true
+  fi
+fi
+
+# The round reviews HEAD, so HEAD must BE the MR head. Do not report a sync as ok
+# without this check: every step above can succeed while HEAD points elsewhere.
+# Exit 3 is the one sanctioned exception, because its merge stays local by design.
+if [ "$SYNC_FAILED" != "true" ] && [ "$UNEXPECTED_DELETIONS" != "true" ]; then
+  head_sha=$(cd "$TARGET_ABS" && git rev-parse HEAD 2>/dev/null)
+  mr_head_sha=$(cd "$TARGET_ABS" && git rev-parse -q --verify "refs/remotes/$REMOTE/$SOURCE_BRANCH" 2>/dev/null)
+  if [ -z "$head_sha" ] || [ "$head_sha" != "$mr_head_sha" ]; then
+    SYNC_FAILED=true
+    SYNC_REASON="after sync, HEAD (${head_sha:-unresolved}) is not the MR head $REMOTE/$SOURCE_BRANCH (${mr_head_sha:-missing}); refusing to review a commit the MR does not point at."
   fi
 fi
 
