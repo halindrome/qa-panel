@@ -20,6 +20,7 @@ config/            defaults.json, the shipped config layer
 examples/          project-config templates
 test/              preflight.test.sh, init.test.sh, no-private-identifiers.sh
 docs/              CONFIGURING, CASE-STUDIES, ROADMAP
+plugins/qa-remaining/   companion plugin: a hooks module (mod) drawing the remaining-tickets pane
 ```
 
 Read [docs/ROADMAP.md](docs/ROADMAP.md) before proposing a design change. It records
@@ -47,6 +48,10 @@ bash test/init.test.sh
 bash test/no-private-identifiers.sh  # must print ok
 claude plugin validate .
 ```
+
+If you changed `plugins/qa-remaining/`, also run `claude plugin validate plugins/qa-remaining`
+and `claude plugin test plugins/qa-remaining`. CI only checks that plugin's manifest JSON. Try it
+live with `claude --plugin-dir plugins/qa-remaining`.
 
 If you changed `skills/qa-cycle/SKILL.md`, also run
 `claude --plugin-dir . plugin details qa-panel` and report the on-invoke token
@@ -100,6 +105,9 @@ have actually broken CI:
 Bump the version in `.claude-plugin/plugin.json`, both places in
 `.claude-plugin/marketplace.json`, and the status line in `README.md`. Installed copies
 only update when the version changes.
+
+qa-remaining is versioned on its own: bump `plugins/qa-remaining/.claude-plugin/plugin.json`
+and its entry in `.claude-plugin/marketplace.json`.
 
 ## Reporting bugs
 

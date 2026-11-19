@@ -14,6 +14,7 @@ bash test/preflight.test.sh          # 929 passed / 0 failed  (~4 min: 55 sectio
 bash test/init.test.sh               #  39 passed / 0 failed
 bash test/no-private-identifiers.sh  # must print ok
 claude plugin validate .
+claude plugin test plugins/qa-remaining          # the companion pane plugin
 claude --plugin-dir . plugin details qa-panel   # inventory + token cost
 ```
 

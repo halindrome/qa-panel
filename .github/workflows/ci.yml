@@ -56,7 +56,7 @@ jobs:
       - name: manifest is well-formed JSON with required keys
         run: |
           set -euo pipefail
-          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/qa-remaining/.claude-plugin/plugin.json; do
             jq empty "$f"
             echo "$f: valid JSON"
           done

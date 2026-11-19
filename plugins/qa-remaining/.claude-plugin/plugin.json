@@ -1,0 +1,11 @@
+{
+  "name": "qa-remaining",
+  "version": "0.1.0",
+  "description": "Side pane listing the tickets still open for the branch you merge into, kept current by Claude and reordered by you.",
+  "author": { "name": "Shane McCarron" },
+  "homepage": "https://github.com/halindrome/qa-panel/tree/main/plugins/qa-remaining#readme",
+  "repository": "https://github.com/halindrome/qa-panel",
+  "license": "Apache-2.0",
+  "keywords": ["qa", "tickets", "epic", "pane"],
+  "types": "./types/index.d.ts"
+}

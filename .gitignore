@@ -11,3 +11,6 @@
 
 # Local Claude Code tooling (hooks, rules, settings) -- machine-specific, never shipped
 .claude/
+
+# Engine-generated mod types
+plugins/*/.claude-plugin/types/

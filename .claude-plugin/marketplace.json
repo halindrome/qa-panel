@@ -14,6 +14,15 @@
       "author": { "name": "Shane McCarron" },
       "category": "development",
       "keywords": ["code-review", "qa", "gitlab", "github"]
+    },
+    {
+      "name": "qa-remaining",
+      "source": "./plugins/qa-remaining",
+      "description": "Side pane of the tickets still open for the branch you merge into, kept current by Claude and reordered by you.",
+      "version": "0.1.0",
+      "author": { "name": "Shane McCarron" },
+      "category": "development",
+      "keywords": ["qa", "tickets", "epic", "pane"]
     }
   ]
 }
