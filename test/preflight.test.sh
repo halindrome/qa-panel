@@ -155,6 +155,8 @@ SH
   git -C "$repo" add -A >/dev/null; git -C "$repo" commit -qm base
   git -C "$repo" push -q origin "$tgt_branch"
   git -C "$repo" checkout -q -b "$src_branch"
+  # An MR's source branch exists on the remote; preflight refuses one that does not.
+  git -C "$repo" push -q origin "$src_branch" 2>/dev/null || true
 
   # The stub honours env vars so a case can steer identity, the MR title/desc
   # (contract extraction), and the approval list (approval seeding) without
@@ -289,6 +291,65 @@ git -C "$r/repo" remote set-url origin /nonexistent/nope.git
 out=$(run_preflight "$r" 73 mono); rc=$?
 note_scratch "$out"; eq "broken remote -> exit 4" "$rc" "4"
 eq "  reason mentions fetch" "$(jq -r '.sync.reason|test("fetch")' <<<"$out")" "true"
+rm -rf "$r"
+# (e) local branch BEHIND the MR head (a fix pushed from another worktree): sync
+# fast-forwards it, so the round reviews the MR head, not the stale local tip.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+mr_head=$(git -C "$r/repo" rev-parse HEAD)
+git -C "$r/repo" reset -q --hard HEAD~1
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "stale local branch -> exit 0" "$rc" "0"
+eq "  HEAD fast-forwarded to the MR head" "$(git -C "$r/repo" rev-parse HEAD)" "$mr_head"
+rm -rf "$r"
+# (f) local branch DIVERGED from the MR head: never guessed at.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+git -C "$r/repo" reset -q --hard HEAD~1
+echo other > "$r/repo/other.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm other
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "diverged local branch -> exit 4" "$rc" "4"
+# "cannot fast-forward" is preflight's own wording; git's push error says "non-fast-forward".
+eq "  reason is the ff-only refusal" "$(jq -r '.sync.reason|test("cannot fast-forward")' <<<"$out")" "true"
+rm -rf "$r"
+# (g) source branch deleted on the remote from ELSEWHERE: the local tracking ref
+# survives a plain fetch, so it must not stand in for the MR head.
+r=$(mkfixture "feature/x" "main")
+git --git-dir="$r/remote.git" branch -q -D feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "source branch missing on remote -> exit 4" "$rc" "4"
+eq "  reason names the missing branch" "$(jq -r '.sync.reason|test("not found")' <<<"$out")" "true"
+rm -rf "$r"
+# (h) a clone whose fetch refspec covers only the base branch: no tracking ref for
+# the source branch, and a push does not create one. Both directions must still sync.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+mr_head=$(git -C "$r/repo" rev-parse HEAD)
+git -C "$r/repo" reset -q --hard HEAD~1
+git -C "$r/repo" config remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
+git -C "$r/repo" update-ref -d refs/remotes/origin/feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "narrowed refspec, local behind -> exit 0" "$rc" "0"
+eq "  HEAD fast-forwarded to the MR head" "$(git -C "$r/repo" rev-parse HEAD)" "$mr_head"
+echo more > "$r/repo/more.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm more
+git -C "$r/repo" update-ref -d refs/remotes/origin/feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "narrowed refspec, local ahead -> exit 0" "$rc" "0"
+eq "  the local commit reached the remote" \
+   "$(git -C "$r/repo" ls-remote origin refs/heads/feature/x | awk '{print $1}')" "$(git -C "$r/repo" rev-parse HEAD)"
+rm -rf "$r"
+# (i) the MR head moves between the push and the final check: only the post-push
+# HEAD == MR-head assertion can see it, so this case reaches that block alone.
+r=$(mkfixture "feature/x" "main")
+echo ahead > "$r/repo/ahead.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm ahead
+printf '#!/bin/sh\ngit update-ref refs/heads/feature/x refs/heads/main\n' > "$r/remote.git/hooks/post-receive"
+chmod +x "$r/remote.git/hooks/post-receive"
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "MR head moved after the push -> exit 4" "$rc" "4"
+eq "  reason names the HEAD mismatch" "$(jq -r '.sync.reason|test("is not the MR head")' <<<"$out")" "true"
 rm -rf "$r"
 
 # ---------------------------------------------------------------------------
@@ -1838,6 +1899,7 @@ mkdir -p "$r/repo/apps/api/db"; echo sub-base > "$r/repo/apps/api/base.txt"
 git -C "$r/repo/apps/api" add -A >/dev/null; git -C "$r/repo/apps/api" commit -qm base
 git -C "$r/repo/apps/api" push -q origin main
 git -C "$r/repo/apps/api" checkout -q -b feature/x
+git -C "$r/repo/apps/api" push -q origin feature/x
 printf -- '-- the schema\n' > "$r/repo/apps/api/db/template.sql"
 git -C "$r/repo/apps/api" add -A >/dev/null; git -C "$r/repo/apps/api" commit -qm "touch the schema"
 out=$(run_preflight "$r" 73 api)

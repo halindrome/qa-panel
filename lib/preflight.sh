@@ -704,6 +704,26 @@ if [ "$SYNC_FAILED" != "true" ]; then
   fi
 fi
 
+# Bring the local branch up to the MR head before merging the base. A fix pushed
+# from another worktree (or another clone) moves $REMOTE/$SOURCE_BRANCH ahead of
+# the local ref; merging the base into that stale local would review an old commit.
+# Fast-forward only: a local branch that has diverged from the MR is the operator's
+# to reconcile, never preflight's to guess at.
+# Fetch the source branch by explicit refspec rather than trusting the tracking ref:
+# a plain fetch never prunes a branch deleted elsewhere, and a narrowed fetch
+# refspec never updates it, so the tracking ref alone can be stale or absent.
+if [ "$SYNC_FAILED" != "true" ]; then
+  if ! src_fetch=$(cd "$TARGET_ABS" && git fetch "$REMOTE" "+refs/heads/$SOURCE_BRANCH:refs/remotes/$REMOTE/$SOURCE_BRANCH" 2>&1); then
+    SYNC_FAILED=true
+    SYNC_REASON="MR source branch '$SOURCE_BRANCH' not found on $REMOTE (or could not be fetched), so the checkout cannot be matched to the MR head: $src_fetch"
+  else
+    ff_out=$(cd "$TARGET_ABS" && git merge --ff-only "$REMOTE/$SOURCE_BRANCH" 2>&1) || {
+      SYNC_FAILED=true
+      SYNC_REASON="local '$SOURCE_BRANCH' cannot fast-forward to $REMOTE/$SOURCE_BRANCH (diverged, or the tree is in the way). Reconcile by hand: $ff_out"
+    }
+  fi
+fi
+
 PRE_MERGE_HEAD=""
 if [ "$SYNC_FAILED" != "true" ]; then
   # Record the pre-merge tip so the deletion heuristic below can measure what the
@@ -799,6 +819,19 @@ if [ "$PUSH_ELIGIBLE" = "true" ] && [ "$SYNC_FAILED" != "true" ]; then
     SYNC_REASON="git push $REMOTE $SOURCE_BRANCH failed: $push_out"
   else
     SYNC_PUSHED=true
+  fi
+fi
+
+# The round reviews HEAD, so HEAD must BE the MR head. Do not report a sync as ok
+# without this check: every step above can succeed while HEAD points elsewhere.
+# Exit 3 is the one sanctioned exception, because its merge stays local by design.
+if [ "$SYNC_FAILED" != "true" ] && [ "$UNEXPECTED_DELETIONS" != "true" ]; then
+  head_sha=$(cd "$TARGET_ABS" && git rev-parse HEAD 2>/dev/null)
+  # Ask the remote itself: a push does not update a tracking ref outside the fetch refspec.
+  mr_head_sha=$(cd "$TARGET_ABS" && git ls-remote --exit-code "$REMOTE" "refs/heads/$SOURCE_BRANCH" 2>/dev/null | awk '{ print $1; exit }')
+  if [ -z "$head_sha" ] || [ "$head_sha" != "$mr_head_sha" ]; then
+    SYNC_FAILED=true
+    SYNC_REASON="after sync, HEAD (${head_sha:-unresolved}) is not the MR head $REMOTE/$SOURCE_BRANCH (${mr_head_sha:-missing}); refusing to review a commit the MR does not point at."
   fi
 fi
 
