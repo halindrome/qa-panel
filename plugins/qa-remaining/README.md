@@ -63,6 +63,7 @@ The first rule that applies wins:
   "ticketUrl": "https://example.atlassian.net/browse/",
   "search": { "label": "Live search: open children", "href": "https://example.atlassian.net/issues/?jql=..." },
   "groups": [
+    { "name": "Needs your answer", "items": [{ "key": "PROJ-104", "why": "Fix the writer and leave the backfill tool alone?" }] },
     { "name": "Needs a code fix", "items": [{ "key": "PROJ-101", "why": "Harness hardcodes test records" }] },
     { "name": "Ready for QA", "items": [{ "key": "PROJ-113", "why": "Merged; retest on the next build" }] }
   ],
@@ -72,6 +73,9 @@ The first rule that applies wins:
 
 Every field is optional except `groups`. A ticket links to `ticketUrl` + `key`, or to its own `href`, so any
 tracker works (Jira, GitHub issues, Linear). Order in an array is priority.
+
+When Claude is blocked on you (a decision, an OK to proceed), it puts the question first, in a
+group named `Needs your answer`, and removes it once you answer. Check that group first.
 
 ## Reordering
 

@@ -116,7 +116,9 @@ export const register: Register = on => {
       `# Remaining tickets\nThe tickets still open for merge target \`${at.target}\` are kept in \`${at.path}\`, ` +
       `shown to the person in a side pane. Shape: ${SCHEMA}. Array order is priority and the person reorders it in the ` +
       `pane: keep their order when you edit, and work from the top. When a ticket's state changes, update its \`why\`, ` +
-      `move it to the right group, set \`updated\`, and drop it once it is done.`
+      `move it to the right group, set \`updated\`, and drop it once it is done. When you are blocked on the person ` +
+      `(a decision, an OK to proceed), put it in a first group named "Needs your answer": one item per question, its ` +
+      `\`why\` the question itself with enough context to answer it there. Remove the item once they answer.`
     return { ...out, sections: [...out.sections, { id: 'qa-remaining:list', text, scope: 'session' as const }] }
   })
 
