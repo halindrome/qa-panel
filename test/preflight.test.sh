@@ -311,14 +311,35 @@ git -C "$r/repo" reset -q --hard HEAD~1
 echo other > "$r/repo/other.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm other
 out=$(run_preflight "$r" 73 mono); rc=$?
 note_scratch "$out"; eq "diverged local branch -> exit 4" "$rc" "4"
-eq "  reason names the fast-forward" "$(jq -r '.sync.reason|test("fast-forward")' <<<"$out")" "true"
+# "cannot fast-forward" is preflight's own wording; git's push error says "non-fast-forward".
+eq "  reason is the ff-only refusal" "$(jq -r '.sync.reason|test("cannot fast-forward")' <<<"$out")" "true"
 rm -rf "$r"
-# (g) source branch absent on the remote: HEAD cannot be matched to an MR head.
+# (g) source branch deleted on the remote from ELSEWHERE: the local tracking ref
+# survives a plain fetch, so it must not stand in for the MR head.
 r=$(mkfixture "feature/x" "main")
-git -C "$r/repo" push -q origin --delete feature/x
+git --git-dir="$r/remote.git" branch -q -D feature/x
 out=$(run_preflight "$r" 73 mono); rc=$?
 note_scratch "$out"; eq "source branch missing on remote -> exit 4" "$rc" "4"
 eq "  reason names the missing branch" "$(jq -r '.sync.reason|test("not found")' <<<"$out")" "true"
+rm -rf "$r"
+# (h) a clone whose fetch refspec covers only the base branch: no tracking ref for
+# the source branch, and a push does not create one. Both directions must still sync.
+r=$(mkfixture "feature/x" "main")
+echo fix > "$r/repo/fix.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm fix
+git -C "$r/repo" push -q origin feature/x
+mr_head=$(git -C "$r/repo" rev-parse HEAD)
+git -C "$r/repo" reset -q --hard HEAD~1
+git -C "$r/repo" config remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
+git -C "$r/repo" update-ref -d refs/remotes/origin/feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "narrowed refspec, local behind -> exit 0" "$rc" "0"
+eq "  HEAD fast-forwarded to the MR head" "$(git -C "$r/repo" rev-parse HEAD)" "$mr_head"
+echo more > "$r/repo/more.txt"; git -C "$r/repo" add -A >/dev/null; git -C "$r/repo" commit -qm more
+git -C "$r/repo" update-ref -d refs/remotes/origin/feature/x
+out=$(run_preflight "$r" 73 mono); rc=$?
+note_scratch "$out"; eq "narrowed refspec, local ahead -> exit 0" "$rc" "0"
+eq "  the local commit reached the remote" \
+   "$(git -C "$r/repo" ls-remote origin refs/heads/feature/x | awk '{print $1}')" "$(git -C "$r/repo" rev-parse HEAD)"
 rm -rf "$r"
 
 # ---------------------------------------------------------------------------
